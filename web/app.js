@@ -326,16 +326,16 @@ function renderBand(container, snapshot, isOpp, privateData) {
 
   const pilesEl = document.createElement("div");
   pilesEl.className = "piles";
-  pilesEl.appendChild(pileChip("太陽庫", snapshot.sunPileCount, "sun"));
-  pilesEl.appendChild(pileChip("月亮庫", snapshot.moonPileCount, "moon"));
+  pilesEl.appendChild(pileCardTile("太陽庫", snapshot.sunPileCount, "back_sun"));
+  pilesEl.appendChild(pileCardTile("月亮庫", snapshot.moonPileCount, "back_moon"));
   pilesEl.appendChild(pileChip("棄牌", snapshot.discardCount, "discard"));
   container.appendChild(pilesEl);
 
   const handEl = document.createElement("div");
   handEl.className = "hand";
   if (isOpp) {
-    handEl.appendChild(pileChip("太陽手牌", snapshot.handSunCount, "sun"));
-    handEl.appendChild(pileChip("月亮手牌", snapshot.handMoonCount, "moon"));
+    handEl.appendChild(pileCardTile("太陽手牌", snapshot.handSunCount, "back_sun"));
+    handEl.appendChild(pileCardTile("月亮手牌", snapshot.handMoonCount, "back_moon"));
   } else {
     const priv = privateData || { handSun: [], handMoon: [] };
     const sunPickable = askKind === "sun";
@@ -367,6 +367,26 @@ function pileChip(label, count, kind) {
   el.className = `chip chip-${kind}`;
   el.innerHTML = `<span class="chip-label">${label}</span><span class="chip-count">x${count}</span>`;
   return el;
+}
+
+function pileCardTile(label, count, backName) {
+  const wrap = document.createElement("div");
+  wrap.className = "hand-card-wrap pile-tile-wrap";
+  const img = document.createElement("img");
+  img.className = "hand-card pile-back";
+  img.src = cardImgSrc(backName);
+  img.alt = label;
+  img.draggable = false;
+  wrap.appendChild(img);
+  const cap = document.createElement("div");
+  cap.className = "pile-tile-label";
+  cap.textContent = label;
+  wrap.appendChild(cap);
+  const badge = document.createElement("span");
+  badge.className = "hand-card-count";
+  badge.textContent = `x${count}`;
+  wrap.appendChild(badge);
+  return wrap;
 }
 
 function cardImgSrc(name) {
@@ -496,11 +516,12 @@ function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
   row.appendChild(slotEl("太陽", snapshot.playedSun && snapshot.playedSun.length ? snapshot.playedSun.join("、") : null, "sun"));
 
   let starContent = null, starBack = false;
-  if (isOpp && !starsRevealed) {
-    starContent = "?";
-    starBack = true;
+  if (isOpp) {
+    if (!starsRevealed) { starContent = "?"; starBack = true; }
+    else { starContent = snapshot.star || null; }
   } else {
-    starContent = snapshot.star || null;
+    // 自己的星星就算還沒公開,也可以透過私密資料立刻看到自己蓋了什麼
+    starContent = snapshot.star || (privateData && privateData.committedStar) || null;
   }
   row.appendChild(slotEl("星星", starContent, "star", starBack));
 
@@ -532,20 +553,41 @@ function slotEl(header, content, kind, back, onTap) {
   h.className = "slot-header";
   h.textContent = header;
   wrap.appendChild(h);
-  const box = document.createElement("div");
-  box.className = `slot-box ${content ? "slot-" + kind : "slot-empty"} ${back ? "slot-back" : ""} ${onTap ? "selectable" : ""}`;
-  box.textContent = content ? content : "—";
-  if (content && !back) attachCardInfo(box, content);
-  if (onTap) {
-    box.setAttribute("role", "button");
-    box.setAttribute("tabindex", "0");
-    box.setAttribute("aria-label", `發動 ${content}`);
-    box.addEventListener("click", onTap);
-    box.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onTap(); }
-    });
+
+  if (back) {
+    const img = document.createElement("img");
+    img.className = "slot-card-img";
+    img.src = cardImgSrc(`back_${kind}`);
+    img.alt = "?";
+    img.draggable = false;
+    wrap.appendChild(img);
+    return wrap;
   }
-  wrap.appendChild(box);
+
+  if (content) {
+    const img = document.createElement("img");
+    img.className = "slot-card-img" + (onTap ? " selectable" : "");
+    img.src = cardImgSrc(content);
+    img.alt = content;
+    img.draggable = false;
+    attachCardInfo(img, content);
+    if (onTap) {
+      img.setAttribute("role", "button");
+      img.setAttribute("tabindex", "0");
+      img.setAttribute("aria-label", `發動 ${content}`);
+      img.addEventListener("click", onTap);
+      img.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onTap(); }
+      });
+    }
+    wrap.appendChild(img);
+    return wrap;
+  }
+
+  const empty = document.createElement("div");
+  empty.className = "slot-empty-card";
+  empty.textContent = "—";
+  wrap.appendChild(empty);
   return wrap;
 }
 
