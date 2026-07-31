@@ -513,11 +513,15 @@ class Game:
     def ai_decide_moon_activate(self, actor, other, card):
         other_proj = self.project_final(other)
         if card in MOON_STEAL:
+            if not other_proj:
+                return False  # 對手沒出招時,偷變沒有意義
             candidate = MOON_STEAL[card]
-            if other_proj:
-                score = beats(candidate, other_proj)
-                return score >= (0 if self.difficulty == "hard" else 1)
-            return self.difficulty != "easy"
+            candidate_score = beats(candidate, other_proj)
+            current_proj = self.project_final(actor)
+            current_score = beats(current_proj, other_proj) if current_proj else -2
+            if self.difficulty == "hard":
+                return candidate_score > current_score
+            return candidate_score > current_score and candidate_score == 1
         if card == "日蝕":
             actor_proj = self.project_final(actor)
             if other.played_sun_cards and not other.sun_negated and other_proj and actor_proj:

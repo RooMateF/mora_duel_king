@@ -438,12 +438,13 @@ class Game {
   aiDecideMoonActivate(actor, other, card) {
     const otherProj = this.projectFinal(other);
     if (MOON_STEAL[card]) {
+      if (!otherProj) return false; // 對手沒出招時,偷變沒有意義
       const candidate = MOON_STEAL[card];
-      if (otherProj) {
-        const score = beats(candidate, otherProj);
-        return score >= (this.difficulty === "hard" ? 0 : 1);
-      }
-      return this.difficulty !== "easy";
+      const candidateScore = beats(candidate, otherProj);
+      const currentProj = this.projectFinal(actor);
+      const currentScore = currentProj ? beats(currentProj, otherProj) : -2;
+      if (this.difficulty === "hard") return candidateScore > currentScore;
+      return candidateScore > currentScore && candidateScore === 1;
     }
     if (card === "日蝕") {
       const actorProj = this.projectFinal(actor);
