@@ -74,8 +74,12 @@
 
 <div id="cardInfoOverlay" class="overlay hidden" onclick="if(event.target===this)this.classList.add('hidden')">
   <div class="modal-box card-info-box">
-    <h3 id="cardInfoTitle"></h3>
-    <pre id="cardInfoText"></pre>
+    <img id="cardInfoImg" class="card-info-img" alt="">
+    <div class="card-info-header">
+      <span id="cardInfoName" class="card-info-name"></span>
+      <span id="cardInfoKind" class="card-info-kind"></span>
+    </div>
+    <pre id="cardInfoText" class="card-info-text"></pre>
     <button onclick="$('cardInfoOverlay').classList.add('hidden')">關閉</button>
   </div>
 </div>

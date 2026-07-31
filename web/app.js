@@ -634,7 +634,11 @@ function attachInteractiveCard(el, opts) {
 
 function showCardInfo(cardName) {
   const kind = cardKind(cardName);
-  $("cardInfoTitle").textContent = `${cardName}(${CARD_KIND_LABEL[kind]})`;
+  $("cardInfoImg").src = cardImgSrc(cardName);
+  $("cardInfoImg").alt = cardName;
+  $("cardInfoName").textContent = cardName;
+  $("cardInfoKind").textContent = CARD_KIND_LABEL[kind];
+  $("cardInfoKind").className = `card-info-kind kind-${kind}`;
   $("cardInfoText").textContent = CARD_EFFECTS[cardName];
   $("cardInfoOverlay").classList.remove("hidden");
 }
