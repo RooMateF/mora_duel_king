@@ -3,7 +3,9 @@
 // 單人模式:new Game(ui, "你", "電腦", {vsAi:true, difficulty}) 時,p2 全部由內建 AI 決策,完全不會呼叫 ui。
 // this.ui 需提供以下介面(見 net.js / app.js 的 makeUi()):
 //   ui.log(text)
-//   ui.ask(role, title, prompt, options) -> Promise<value>   options: [{label, value}]
+//   ui.ask(role, title, prompt, options, kind) -> Promise<value>   options: [{label, value}]
+//     kind 是可選的提示,標記這個詢問對應到「打出哪張牌」,讓 UI 可以直接點卡片而不是跳文字選單:
+//     "star" | "sun" | "moonCommit" | "moonActivate" | undefined(一般文字選項)
 //   ui.confirm(role, title, prompt) -> Promise<boolean>
 //   ui.info(role, title, msg) -> Promise<void>
 
@@ -214,7 +216,7 @@ class Game {
     if (this.isAiControlled(player)) return this.aiChooseStar(player, available);
     const choice = await this.ui.ask(player.role, "出星星卡(蓋牌)",
       "選擇這回合要出的星星卡(雙方同時決定,對方看不到):",
-      available.map((t) => ({ label: `${t}(剩${player.stars[t]}張)`, value: t })));
+      available.map((t) => ({ label: `${t}(剩${player.stars[t]}張)`, value: t })), "star");
     return choice || available[0];
   }
 
@@ -256,7 +258,7 @@ class Game {
     if (this.isAiControlled(actor)) return this.aiDecideSun(actor);
     const opts = actor.handSun.map((c) => ({ label: `打出:${c}`, value: c }));
     opts.push({ label: "不出太陽", value: null });
-    return await this.ui.ask(actor.role, "太陽階段", `${actor.name},要打出太陽卡嗎?`, opts);
+    return await this.ui.ask(actor.role, "太陽階段", `${actor.name},要打出太陽卡嗎?`, opts, "sun");
   }
 
   aiDecideSun(actor) {
@@ -389,7 +391,7 @@ class Game {
     opts.push({ label: "不蓋月亮卡", value: null });
     return await this.ui.ask(player.role, "蓋月亮卡(可不蓋)",
       `${player.name},要不要蓋一張月亮卡備用?(蓋牌後,稍後可以選擇要不要真的發動;` +
-      `月亮卡要先蓋出去才能用,包含日蝕反制烈陽——沒蓋的話這回合完全不能發動)`, opts);
+      `月亮卡要先蓋出去才能用,包含日蝕反制烈陽——沒蓋的話這回合完全不能發動)`, opts, "moonCommit");
   }
 
   aiDecideMoonCommit(player) {
@@ -426,8 +428,10 @@ class Game {
     } else if (this.isAiControlled(actor)) {
       activate = this.aiDecideMoonActivate(actor, other, card);
     } else {
-      activate = await this.ui.confirm(actor.role, "發動月亮卡?",
-        `${actor.name},要發動蓋著的【${card}】嗎?(不發動的話,這張牌直接收回手上)`);
+      activate = await this.ui.ask(actor.role, "發動月亮卡?",
+        `${actor.name},要發動蓋著的【${card}】嗎?(不發動的話,這張牌直接收回手上)`,
+        [{ label: `發動【${card}】`, value: true }, { label: "不發動", value: false }],
+        "moonActivate");
     }
     actor.moonDecided = true;
     if (!activate) {

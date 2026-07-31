@@ -114,21 +114,13 @@ button:hover { filter: brightness(1.1); }
 
 .band-name { font-weight: bold; font-size: 16px; margin-bottom: 8px; }
 
-.badges, .piles, .hand {
+.piles, .hand {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 8px;
+  align-items: flex-end;
 }
-
-.badge {
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: bold;
-  color: white;
-}
-.badge-star { background: var(--star); }
 
 .chip {
   display: flex;
@@ -145,17 +137,68 @@ button:hover { filter: brightness(1.1); }
 .chip-discard { background: #555a63; }
 .chip-count { font-size: 14px; font-weight: bold; }
 
-.card {
-  padding: 8px 10px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: bold;
-  color: white;
-  min-width: 60px;
-  text-align: center;
+.star-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
 }
-.card-sun { background: var(--sun); }
-.card-moon { background: var(--moon); }
+
+.hand-card-wrap {
+  position: relative;
+  display: inline-block;
+}
+.hand-card {
+  width: 66px;
+  height: auto;
+  aspect-ratio: 400 / 560;
+  border-radius: 6px;
+  display: block;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+  filter: grayscale(45%) brightness(0.8);
+  transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
+}
+.hand-card.selectable {
+  filter: none;
+  cursor: pointer;
+  box-shadow: 0 0 0 3px var(--accent), 0 4px 10px rgba(0,0,0,0.5);
+}
+.hand-card.selectable:hover { transform: translateY(-4px); }
+.hand-card.selectable:active { transform: translateY(-1px) scale(0.97); }
+
+.hand-card-count {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  background: #161616;
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 1px 5px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.3);
+}
+
+.skip-tile {
+  align-self: center;
+  background: none;
+  border: 2px dashed #6a6f78;
+  color: var(--text-dim);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.skip-tile:hover { border-color: var(--text-dim); color: var(--text); }
+
+.action-prompt {
+  background: rgba(75, 143, 94, 0.18);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  margin-bottom: 8px;
+  color: var(--text);
+}
 
 .bf-row {
   display: flex;
@@ -187,6 +230,15 @@ button:hover { filter: brightness(1.1); }
 .slot-moon { background: var(--moon); }
 .slot-empty { background: var(--empty); color: var(--text-dim); }
 .slot-back { background: #4a4f5a; }
+.slot-box.selectable {
+  cursor: pointer;
+  box-shadow: 0 0 0 3px var(--accent);
+  animation: pulseSelectable 1.4s ease-in-out infinite;
+}
+@keyframes pulseSelectable {
+  0%, 100% { box-shadow: 0 0 0 3px var(--accent); }
+  50% { box-shadow: 0 0 0 6px rgba(75,143,94,0.5); }
+}
 
 #logPanel {
   max-width: 960px;

@@ -9,6 +9,7 @@ let hostStarted = false;
 let gameLog = [];
 let lastPublicSeen = null;
 let lastPrivateSeen = null;
+let pendingAsk = null; // { title, prompt, options, kind, resolve } — 待處理的「打牌」決策
 
 function $(id) { return document.getElementById(id); }
 
@@ -92,7 +93,7 @@ function startGuest() {
     if (lastPublicSeen) renderPublic(lastPublicSeen);
   });
   Net.listenRpcRequest(roomCode, myUid, async (req) => {
-    const value = await showLocalModal(req.title, req.prompt, req.options);
+    const value = await showLocalModal(req.title, req.prompt, req.options, req.kind);
     await Net.sendRpcResponse(roomCode, myUid, req.id, value);
   });
 }
@@ -110,7 +111,7 @@ function startHostGame(hostName, guestName, guestUid) {
     if (lastPublicSeen) renderPublic(lastPublicSeen);
   });
   Net.listenRpcRequest(roomCode, myUid, async (req) => {
-    const value = await showLocalModal(req.title, req.prompt, req.options);
+    const value = await showLocalModal(req.title, req.prompt, req.options, req.kind);
     await Net.sendRpcResponse(roomCode, myUid, req.id, value);
   });
 
@@ -118,14 +119,14 @@ function startHostGame(hostName, guestName, guestUid) {
 }
 
 function makeUi(guestUid) {
-  async function ask(role, title, prompt, options) {
+  async function ask(role, title, prompt, options, kind) {
     let value;
     if (role === "p1") {
-      value = await showLocalModal(title, prompt, options);
+      value = await showLocalModal(title, prompt, options, kind);
     } else {
       const id = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : String(Math.random());
       await Net.sendRpcRequest(roomCode, guestUid, {
-        id, title, prompt,
+        id, title, prompt, kind,
         options: options.map((o) => ({ label: o.label, value: (o.value === undefined ? null : o.value) })),
       });
       value = await Net.waitRpcResponse(roomCode, guestUid, id);
@@ -231,8 +232,8 @@ function startSinglePlayer(difficulty) {
 }
 
 function makeLocalUi() {
-  async function ask(_role, title, prompt, options) {
-    const value = await showLocalModal(title, prompt, options);
+  async function ask(_role, title, prompt, options, kind) {
+    const value = await showLocalModal(title, prompt, options, kind);
     renderLocalState();
     return value;
   }
@@ -310,16 +311,18 @@ function renderBand(container, snapshot, isOpp, privateData) {
   nameEl.textContent = snapshot.name + (isOpp ? "" : "(你)");
   container.appendChild(nameEl);
 
-  const starsEl = document.createElement("div");
-  starsEl.className = "badges";
+  const askKind = !isOpp && pendingAsk ? pendingAsk.kind : null;
+  if (askKind === "star" || askKind === "sun" || askKind === "moonCommit") {
+    container.appendChild(actionPromptEl(pendingAsk.prompt));
+  }
+
+  const starsRow = document.createElement("div");
+  starsRow.className = "star-row";
   STAR_TYPES.forEach((t) => {
-    const b = document.createElement("span");
-    b.className = "badge badge-star";
-    b.textContent = `${t} ${snapshot.stars[t]}`;
-    attachCardInfo(b, t);
-    starsEl.appendChild(b);
+    const selectable = askKind === "star" && pendingAsk.options.some((o) => o.value === t);
+    starsRow.appendChild(handCardTile(t, "star", snapshot.stars[t], selectable ? () => resolvePendingAsk(t) : null));
   });
-  container.appendChild(starsEl);
+  container.appendChild(starsRow);
 
   const pilesEl = document.createElement("div");
   pilesEl.className = "piles";
@@ -335,13 +338,25 @@ function renderBand(container, snapshot, isOpp, privateData) {
     handEl.appendChild(pileChip("月亮手牌", snapshot.handMoonCount, "moon"));
   } else {
     const priv = privateData || { handSun: [], handMoon: [] };
-    (priv.handSun || []).forEach((c) => handEl.appendChild(cardEl(c, "sun")));
-    (priv.handMoon || []).forEach((c) => handEl.appendChild(cardEl(c, "moon")));
+    const sunPickable = askKind === "sun";
+    const moonPickable = askKind === "moonCommit";
+    (priv.handSun || []).forEach((c) => {
+      const selectable = sunPickable && pendingAsk.options.some((o) => o.value === c);
+      handEl.appendChild(handCardTile(c, "sun", null, selectable ? () => resolvePendingAsk(c) : null));
+    });
+    (priv.handMoon || []).forEach((c) => {
+      const selectable = moonPickable && pendingAsk.options.some((o) => o.value === c);
+      handEl.appendChild(handCardTile(c, "moon", null, selectable ? () => resolvePendingAsk(c) : null));
+    });
     if (!(priv.handSun || []).length && !(priv.handMoon || []).length) {
       const span = document.createElement("span");
       span.className = "dim";
       span.textContent = "(手上沒有太陽/月亮卡)";
       handEl.appendChild(span);
+    }
+    if (sunPickable || moonPickable) {
+      const skipOpt = pendingAsk.options.find((o) => o.value === null || o.value === undefined);
+      if (skipOpt) handEl.appendChild(skipTile(skipOpt.label, () => resolvePendingAsk(null)));
     }
   }
   container.appendChild(handEl);
@@ -354,12 +369,65 @@ function pileChip(label, count, kind) {
   return el;
 }
 
-function cardEl(name, kind) {
+function cardImgSrc(name) {
+  return `cards/${encodeURIComponent(name)}.svg`;
+}
+
+function handCardTile(name, kind, count, onTap) {
+  const wrap = document.createElement("div");
+  wrap.className = "hand-card-wrap";
+  const img = document.createElement("img");
+  img.className = `hand-card card-${kind}` + (onTap ? " selectable" : "");
+  img.src = cardImgSrc(name);
+  img.alt = name;
+  img.draggable = false;
+  attachCardInfo(img, name);
+  if (onTap) {
+    img.setAttribute("role", "button");
+    img.setAttribute("tabindex", "0");
+    img.setAttribute("aria-label", `打出 ${name}`);
+    img.addEventListener("click", onTap);
+    img.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onTap(); }
+    });
+  }
+  wrap.appendChild(img);
+  if (count !== null && count !== undefined) {
+    const badge = document.createElement("span");
+    badge.className = "hand-card-count";
+    badge.textContent = `x${count}`;
+    wrap.appendChild(badge);
+  }
+  return wrap;
+}
+
+function skipTile(label, onTap) {
+  const btn = document.createElement("button");
+  btn.className = "skip-tile";
+  btn.textContent = label;
+  btn.onclick = onTap;
+  return btn;
+}
+
+function actionPromptEl(text) {
   const el = document.createElement("div");
-  el.className = `card card-${kind}`;
-  el.textContent = name;
-  attachCardInfo(el, name);
+  el.className = "action-prompt";
+  el.textContent = text;
   return el;
+}
+
+function resolvePendingAsk(value) {
+  if (!pendingAsk) return;
+  const resolve = pendingAsk.resolve;
+  pendingAsk = null;
+  resolve(value);
+}
+
+function showCardPickUI(title, prompt, options, kind) {
+  return new Promise((resolve) => {
+    pendingAsk = { title, prompt, options, kind, resolve };
+    if (lastPublicSeen) renderPublic(lastPublicSeen);
+  });
 }
 
 // -- 長按看卡片效果 -----------------------------------------------
@@ -385,6 +453,14 @@ function attachCardInfo(el, cardName) {
   el.addEventListener("pointerleave", cancel);
   el.addEventListener("pointercancel", cancel);
   el.addEventListener("contextmenu", (e) => { if (fired) e.preventDefault(); });
+  // 長按放開後瀏覽器還是會補發一個 click,這裡攔下來,避免看完效果又立刻誤觸出牌
+  el.addEventListener("click", (e) => {
+    if (fired) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      fired = false;
+    }
+  });
 }
 
 function showCardInfo(cardName) {
@@ -411,6 +487,9 @@ function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
   label.textContent = snapshot.name + (isOpp ? "" : "(你)") + " 的出牌";
   col.appendChild(label);
 
+  const moonActivateAsk = !isOpp && pendingAsk && pendingAsk.kind === "moonActivate" ? pendingAsk : null;
+  if (moonActivateAsk) col.appendChild(actionPromptEl(moonActivateAsk.prompt));
+
   const row = document.createElement("div");
   row.className = "bf-row";
 
@@ -425,21 +504,28 @@ function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
   }
   row.appendChild(slotEl("星星", starContent, "star", starBack));
 
-  let moonContent = null, moonBack = false;
+  let moonContent = null, moonBack = false, moonTap = null;
   if (snapshot.playedMoon) {
     moonContent = snapshot.playedMoon;
   } else if (isOpp) {
     if (snapshot.moonPending) { moonContent = "?"; moonBack = true; }
   } else if (privateData && privateData.pendingMoonCard) {
     moonContent = privateData.pendingMoonCard;
+    if (moonActivateAsk) moonTap = () => resolvePendingAsk(true);
   }
-  row.appendChild(slotEl("月亮", moonContent, "moon", moonBack));
+  row.appendChild(slotEl("月亮", moonContent, "moon", moonBack, moonTap));
 
   col.appendChild(row);
+
+  if (moonActivateAsk) {
+    const skipOpt = moonActivateAsk.options.find((o) => o.value === false);
+    if (skipOpt) col.appendChild(skipTile(skipOpt.label, () => resolvePendingAsk(false)));
+  }
+
   return col;
 }
 
-function slotEl(header, content, kind, back) {
+function slotEl(header, content, kind, back, onTap) {
   const wrap = document.createElement("div");
   wrap.className = "slot-wrap";
   const h = document.createElement("div");
@@ -447,9 +533,18 @@ function slotEl(header, content, kind, back) {
   h.textContent = header;
   wrap.appendChild(h);
   const box = document.createElement("div");
-  box.className = `slot-box ${content ? "slot-" + kind : "slot-empty"} ${back ? "slot-back" : ""}`;
+  box.className = `slot-box ${content ? "slot-" + kind : "slot-empty"} ${back ? "slot-back" : ""} ${onTap ? "selectable" : ""}`;
   box.textContent = content ? content : "—";
   if (content && !back) attachCardInfo(box, content);
+  if (onTap) {
+    box.setAttribute("role", "button");
+    box.setAttribute("tabindex", "0");
+    box.setAttribute("aria-label", `發動 ${content}`);
+    box.addEventListener("click", onTap);
+    box.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onTap(); }
+    });
+  }
   wrap.appendChild(box);
   return wrap;
 }
@@ -468,9 +563,16 @@ function showGameOver(winnerRole, pub) {
   setTimeout(() => alert(`遊戲結束!獲勝者:${name}`), 50);
 }
 
-// -- 彈窗(本地決策 modal,房主/加入者共用) --------------------------
+// -- 彈窗(本地決策 modal,房主/加入者共用)------------------------
+// 「打牌」類的決策(星星/太陽/月亮蓋牌/發動月亮)改成直接點畫面上的牌,不跳文字選單;
+// 其他決策(指定目標、選牌堆、強制發動或丟棄…)還是用文字按鈕選單。
 
-function showLocalModal(title, prompt, options) {
+const CARD_PICK_KINDS = ["star", "sun", "moonCommit", "moonActivate"];
+
+function showLocalModal(title, prompt, options, kind) {
+  if (CARD_PICK_KINDS.includes(kind)) {
+    return showCardPickUI(title, prompt, options, kind);
+  }
   return new Promise((resolve) => {
     $("modalTitle").textContent = title;
     $("modalPrompt").textContent = prompt;
