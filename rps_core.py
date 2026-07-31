@@ -1,5 +1,5 @@
 """
-猜拳卡牌遊戲 — 共用規則引擎(文字版 / 圖形版共用)
+猜☆拳☆王 — 共用規則引擎(文字版 / 圖形版共用)
 規則來源:RPS_Card_Game_Design.md,以及後續追加規則:
   - 烈陽效果一:偷看後,對手本回合月亮階段必須打出並發動一張月亮卡(不能選不出)。
   - 日蝕反制烈陽成功:反制方可再指定自己或對手,抽兩張牌(太陽、月亮牌庫自由選,不限一邊一張)。
@@ -43,64 +43,107 @@ MATRIX = [
     [1, 1, 0, 1, -1, 0],
 ]
 
-RULES_TEXT = """\
-================ 簡單規則(先看這裡就能玩) ================
+CARD_KIND_LABEL = {
+    "star": "星星卡",
+    "sun": "太陽卡",
+    "moon": "月亮卡(需先蓋牌才能發動)",
+}
 
-【遊戲目標】
+
+def card_kind(name):
+    if name in STAR_TYPES:
+        return "star"
+    if name in SUN_CARDS_ALL:
+        return "sun"
+    return "moon"
+
+
+CARD_EFFECTS = {
+    "石頭": "贏剪刀,輸布,平石頭。",
+    "布": "贏石頭,輸剪刀,平布。",
+    "剪刀": "贏布,輸石頭,平剪刀。",
+    "殞石頭": (
+        "讓你這回合出的「石頭」升級成殞石頭:贏 石頭/剪刀/雷射剪刀,平 布,輸 鈦合金布。\n"
+        "星星型別不符時(這回合出的不是石頭),這張卡不會升級,直接收回手牌。"
+    ),
+    "雷射剪刀": (
+        "讓你這回合出的「剪刀」升級成雷射剪刀:贏 剪刀/布/鈦合金布,平 石頭,輸 殞石頭。\n"
+        "星星型別不符時(這回合出的不是剪刀),這張卡不會升級,直接收回手牌。"
+    ),
+    "鈦合金布": (
+        "讓你這回合出的「布」升級成鈦合金布:贏 布/石頭/殞石頭,平 剪刀,輸 雷射剪刀。\n"
+        "星星型別不符時(這回合出的不是布),這張卡不會升級,直接收回手牌。"
+    ),
+    "烈陽": (
+        "效果(擇一,一回合限用一次):\n"
+        "① 指定自己或對手,從太陽或月亮牌庫抽一張牌。\n"
+        "② 偷看對手的星星與蓋著的月亮卡,選擇讓那張月亮卡「強制發動」或「強制丟棄」。"
+    ),
+    "偷變石頭": "發動後,把自己這回合的星星改成石頭(蓋過太陽升級的結果)。",
+    "偷變剪刀": "發動後,把自己這回合的星星改成剪刀(蓋過太陽升級的結果)。",
+    "偷變布": "發動後,把自己這回合的星星改成布(蓋過太陽升級的結果)。",
+    "日蝕": (
+        "效果(擇一,一回合限用一次):\n"
+        "① 反制:對手發動烈陽的當下,可立即發動,使該烈陽無效並丟棄;\n"
+        "   並指定自己或對手,抽兩張牌(太陽、月亮牌庫自由選)。\n"
+        "② 主動:使對手這回合的太陽卡效果無效。"
+    ),
+}
+
+
+def _build_rules_text():
+    card_section_groups = [
+        (CARD_KIND_LABEL["star"], STAR_TYPES),
+        (CARD_KIND_LABEL["sun"], SUN_CARDS_ALL),
+        (CARD_KIND_LABEL["moon"], MOON_CARDS_ALL),
+    ]
+    card_lines = []
+    for title, names in card_section_groups:
+        card_lines.append(f"【{title}】")
+        for name in names:
+            card_lines.append(f"{name}:{CARD_EFFECTS[name]}")
+        card_lines.append("")
+    card_section = "\n".join(card_lines).rstrip()
+
+    return f"""\
+================ 遊戲目標 ================
 雙方輪流出牌,誰先被逼到「太陽牌庫和月亮牌庫都抽不出牌」,誰就輸了。
 
-【每回合基本流程】
-1. 雙方各出一張「星星卡」(石頭/布/剪刀),這是每回合決定勝負的主軸。
-2. 雙方也可以打「太陽卡」讓自己的星星升級,或打「月亮卡」偷改自己的星星、干擾對方。
+================ 回合流程 ================
+1. 雙方各出一張「星星卡」,這是每回合決定勝負的主軸。
+2. 也可以打「太陽卡」讓自己的星星升級,或打「月亮卡」偷改自己的星星、干擾對方。
 3. 比完出招後,輸的人被拿走一張星星卡、還要抽牌;贏的人不用抽牌。
 
-【回合內出牌順序】
+出牌順序:
 先攻蓋星星 → 後攻蓋星星 → 先攻蓋月亮(可不蓋) → 後攻蓋月亮(可不蓋)
 → 先攻決定太陽卡 → 後攻決定太陽卡 → 先攻揭星星 → 後攻揭星星
 → 後攻決定要不要發動蓋著的月亮卡 → 先攻決定要不要發動蓋著的月亮卡
+
 星星跟月亮都是「先蓋牌、後面才決定/揭曉」,太陽卡則是當下直接決定、沒有蓋牌這一步。
-日蝕要先蓋出去才能用(跟所有月亮卡一樣);對方打出烈陽的當下,可以提前發動蓋著的日蝕來反制(不用等到月亮階段),但只能擇一使用——用來反制過的日蝕,月亮階段就不會再有它了。
-若蓋牌後最後決定不發動,那張牌直接收回手上,等於沒打。
+月亮卡要先蓋出去才能發動(日蝕的反制效果也不例外);蓋牌後若決定不發動,直接收回手上,等於沒打。
 
-【星星卡 —— 基本猜拳】
-石頭 贏 剪刀、剪刀 贏 布、布 贏 石頭(一般猜拳規則)。
-
-【太陽卡 —— 讓星星升級 / 特殊效果】
-- 殞石頭 / 雷射剪刀 / 鈦合金布:
-  打出後,把你這回合出的「對應星星」升級(殞石頭配石頭、雷射剪刀配剪刀、鈦合金布配布)。
-  升級後的星星打普通星星只會贏或平、絕不會輸。三張升級星星之間也有克制循環:
-      殞石頭 剋 雷射剪刀 剋 鈦合金布 剋 殞石頭
-- 烈陽(打出時二選一效果):
-  A. 偷看:偷看對方這回合出的星星、以及對方手上的月亮卡,而且你可以「再多打一張太陽卡」。
-     代價:對方被偷看後,這回合月亮階段「必須」打出並使用一張月亮卡(不能選擇不出)。
-  B. 逼抽:指定「自己」或「對方」,從太陽牌庫或月亮牌庫(自選一堆)抽一張牌。
-
-【月亮卡 —— 偷改自己的出招 / 反制對方】
-- 偷變石頭 / 偷變剪刀 / 偷變布:
-  在月亮階段,把「自己」這回合出的星星直接換成指定的那一種(即使之前升級過,也會蓋掉、變回換成的那個基本星星)。
-- 日蝕(必須先蓋出去才能用,二選一效果,擇一使用後這張就用掉了):
-  A. 反制烈陽:對方打出烈陽的當下,可以提前發動蓋著的日蝕,讓那次烈陽失效、直接報廢。
-     反制成功後,你可以再指定自己或對方,抽兩張牌(太陽、月亮牌庫自由選,不限一邊一張)。
-  B. 主動使用:如果沒有拿去反制,月亮階段可以正常發動,讓對方這回合打出的太陽卡效果直接失效。
-
-【勝負與抽牌(簡化版)】
-- 比出最終出招,強的一方贏這回合。
-- 贏家:拿走輸家這回合出的那張星星卡(同型 -1)。
-- 輸家:抽牌 1 張太陽 + 1 張月亮。
+勝負與抽牌:
+- 贏家拿走輸家這回合出的那張星星卡(同型 -1);輸家抽牌 1 張太陽 + 1 張月亮。
 - 平手:雙方各自抽 1 張(自己選太陽或月亮堆);如果兩堆都空了,不用抽。
 - 需要抽牌時,如果太陽、月亮兩個牌庫都已經空了 → 直接判負。
 
+================ 卡牌效果 ================
+{card_section}
 
-================ 詳細判定細則(進階/邊界情況) ================
+================ 判例(進階/邊界情況) ================
 
-1. 太陽卡型別不符:打出升級太陽卡時,若這回合出的星星不是它要求的型別,該太陽卡不會升級,而且**直接收回手牌**(不進棄牌區),下回合可以再打;但若升級有生效、卻被對方日蝕主動效果打掉,那張太陽卡依然正常進棄牌區。
+1. 太陽卡型別不符:打出升級太陽卡時,若這回合出的星星不是它要求的型別,該太陽卡不會升級,而且直接收回手牌(不進棄牌區),下回合可以再打;但若升級有生效、卻被對方日蝕主動效果打掉,那張太陽卡依然正常進棄牌區。
 2. 偷變的限制:如果這回合根本沒出星星卡,「偷變」卡打出後不會有任何效果(仍會進棄牌區)。
 3. 完全沒星星可出:若手上三種星星卡都已是 0 張,本回合視為出不了牌,直接算輸掉這回合。
 4. 效果套用順序:星星底牌 → 太陽升級(型別相符才生效) → 月亮偷變(會蓋掉升級結果) → 日蝕主動效果(使對方太陽失效)。
-5. 烈陽逼抽的邊界:指定的那一堆已空 → 不執行、無事發生;但若指定對象的太陽、月亮兩堆「同時」都空 → 該對象直接判負。
-6. 抽牌邊界:輸家抽2張是固定太陽+月亮各一張,某一堆空了就只抽另一堆;日蝕獎勵抽2張則是自由選堆、抽兩次,每次抽牌時若太陽、月亮兩堆同時都空 → 判負。
-7. 星星卡總數固定 18 張(雙方各 9 張)在雙方之間流動,贏家拿走的星星會計入自己該型別持有量,之後可能再被對方贏回去。
+5. 烈陽效果一抽牌的邊界:指定的那一堆已空 → 不執行、無事發生;但若指定對象的太陽、月亮兩堆「同時」都空 → 該對象直接判負。
+6. 烈陽效果二強制丟棄/強制發動的邊界:對方沒有蓋月亮卡時,這個選擇無事發生;強制發動只是設定旗標,實際發動仍在月亮階段依正常流程處理。
+7. 抽牌邊界:輸家抽2張是固定太陽+月亮各一張,某一堆空了就只抽另一堆;日蝕獎勵抽2張則是自由選堆、抽兩次,每次抽牌時若太陽、月亮兩堆同時都空 → 判負。
+8. 星星卡總數固定 18 張(雙方各 9 張)在雙方之間流動,贏家拿走的星星會計入自己該型別持有量,之後可能再被對方贏回去。
 """
+
+
+RULES_TEXT = _build_rules_text()
 
 
 def beats(a, b):
@@ -312,21 +355,13 @@ class Game:
     # -- 太陽階段 -------------------------------------------------------
 
     def sun_phase(self, actor, other):
-        allowed_plays = 1
-        plays_done = 0
-        played_any = False
-        while plays_done < allowed_plays:
-            card = self.decide_sun_card(actor)
-            if card is None:
-                break
-            played_any = True
+        card = self.decide_sun_card(actor)
+        played_any = card is not None
+        if played_any:
             actor.hand_sun.remove(card)
             actor.played_sun_cards.append(card)
-            plays_done += 1
             if card == "烈陽":
-                bonus = self.resolve_blazing_sun(actor, other)
-                if bonus:
-                    allowed_plays += 1
+                self.resolve_blazing_sun(actor, other)
             else:
                 self.gui.log(f"{actor.name} 打出太陽卡:{card}")
         if not played_any:
@@ -364,24 +399,34 @@ class Game:
                 other.moon_decided = True
                 self.gui.log(f"{other.name} 提前發動蓋著的【日蝕】反制!烈陽效果無效(烈陽直接進棄牌區)。")
                 self.eclipse_bonus_draw(other, actor)
-                return False
+                return
         effect = self.decide_blazing_effect(actor)
         if effect == 1:
-            self.gui.log(f"{actor.name} 發動烈陽效果一:偷看 {other.name} 的星星出牌與手上月亮卡,並可追加一張太陽卡。")
+            target, pile = self.decide_blazing_target(actor, other)
+            self.gui.log(f"{actor.name} 發動烈陽效果一:指定 {target.name} 從{pile}牌庫抽一張。")
+            self.force_draw(target, other if target is actor else actor, pile)
+        else:
+            self.gui.log(f"{actor.name} 發動烈陽效果二:偷看 {other.name} 的星星與蓋著的月亮卡。")
+            pending = other.pending_moon_card
             if actor is self.human:
                 msg = (
                     f"{other.name} 這回合暗中出的星星:{other.committed_star or '(無)'}\n"
-                    f"{other.name} 手上的月亮卡:{other.hand_moon if other.hand_moon else '(無)'}"
+                    f"{other.name} 蓋著的月亮卡:{pending or '(無)'}"
                 )
                 self.gui.info("烈陽偷看結果", msg)
-            other.forced_moon = True
-            self.gui.log(f"(規則:{other.name} 本回合月亮階段必須打出並發動一張月亮卡,不能選不出)")
-            return True
-        else:
-            target, pile = self.decide_blazing_target(actor, other)
-            self.gui.log(f"{actor.name} 發動烈陽效果二:指定 {target.name} 從{pile}牌庫抽一張。")
-            self.force_draw(target, other if target is actor else actor, pile)
-            return False
+            if pending is None:
+                self.gui.log(f"{other.name} 沒有蓋月亮卡,無牌可以強制。")
+                return
+            choice = self.decide_blazing_forced_choice(actor, other, pending)
+            if choice == "discard":
+                other.hand_moon.remove(pending)
+                other.discard.append(pending)
+                other.pending_moon_card = None
+                other.moon_decided = True
+                self.gui.log(f"{actor.name} 強制丟棄 {other.name} 蓋著的【{pending}】!")
+            else:
+                other.forced_moon = True
+                self.gui.log(f"{actor.name} 強制發動 {other.name} 蓋著的【{pending}】!(月亮階段會強制生效)")
 
     def decide_eclipse_counter(self, defender, attacker):
         # 日蝕要先蓋牌才能發動(跟所有月亮卡一樣),反制烈陽時可以提前發動蓋著的日蝕
@@ -402,8 +447,8 @@ class Game:
             return self.gui.choose(
                 "烈陽效果(擇一)",
                 "選擇要發動的效果:",
-                [("效果一:偷看對手星星/月亮,可追加一張太陽(對手本回合被迫出月亮)", 1),
-                 ("效果二:指定自己或對手抽一張太陽/月亮卡", 2)],
+                [("效果一:指定自己或對手,從太陽或月亮牌庫抽一張牌", 1),
+                 ("效果二:偷看對手星星與蓋著的月亮卡,可選擇強制發動或強制丟棄那張月亮卡", 2)],
             )
         return self.ai_decide_blazing_effect(actor)
 
@@ -411,25 +456,40 @@ class Game:
         other = self.human if actor is self.ai else self.ai
         other_total = len(other.sun_pile) + len(other.moon_pile)
         if other_total <= 2 and self.difficulty != "easy":
-            return 2
+            return 1
         return random.choice([1, 2])
 
     def decide_blazing_target(self, actor, other):
         if actor is self.human:
             target = self.gui.choose(
-                "烈陽效果二 — 目標", "指定誰抽牌?",
+                "烈陽效果一 — 目標", "指定誰抽牌?",
                 [(f"對手({other.name})抽牌", other), (f"自己({actor.name})抽牌", actor)],
             )
             if target is None:
                 target = other
             pile = self.gui.choose(
-                "烈陽效果二 — 牌堆", "指定抽哪一堆?",
+                "烈陽效果一 — 牌堆", "指定抽哪一堆?",
                 [("太陽牌庫", "太陽"), ("月亮牌庫", "月亮")],
             )
             if pile is None:
                 pile = "太陽"
             return target, pile
         return self.ai_decide_blazing_target(actor, other)
+
+    def decide_blazing_forced_choice(self, actor, other, pending_card):
+        if actor is self.human:
+            choice = self.gui.choose(
+                "烈陽效果二 — 強制發動或丟棄",
+                f"{other.name} 蓋著【{pending_card}】,要強制發動還是強制丟棄?",
+                [("強制發動(月亮階段強制生效)", "activate"), ("強制丟棄(直接作廢)", "discard")],
+            )
+            return choice or "discard"
+        return self.ai_decide_blazing_forced_choice(actor, other)
+
+    def ai_decide_blazing_forced_choice(self, actor, other):
+        # 強制丟棄通常比較安全:不會意外幫到對方,也不會反過來打掉自己剛升級的太陽卡
+        chance_discard = {"easy": 0.5, "normal": 0.75, "hard": 0.9}[self.difficulty]
+        return "discard" if random.random() < chance_discard else "activate"
 
     def ai_decide_blazing_target(self, actor, other):
         actor_total = len(actor.sun_pile) + len(actor.moon_pile)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-猜拳卡牌遊戲 — 純文字版(終端機執行,不需要任何額外套件)
+猜☆拳☆王 — 純文字版(終端機執行,不需要任何額外套件)
 
 執行方式:
     python rps_text.py
@@ -41,7 +41,7 @@ class TextUI:
 
 def main():
     print("=" * 60)
-    print("猜拳卡牌遊戲 — 純文字版")
+    print("猜☆拳☆王 — 純文字版")
     print("=" * 60)
     print(RULES_TEXT)
 

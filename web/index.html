@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>猜拳卡牌遊戲 — 雙人連線版</title>
+<title>猜☆拳☆王</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <div id="lobby" class="screen">
-  <h1>猜拳卡牌遊戲</h1>
+  <h1>猜☆拳☆王</h1>
   <p class="subtitle">雙人連線版</p>
   <input id="nameInput" type="text" placeholder="輸入你的名字" maxlength="12">
   <div class="lobby-actions">
@@ -47,6 +47,7 @@
   <div id="topBar">
     <button id="rulesBtn">規則說明</button>
     <span id="statusText"></span>
+    <span class="dim" style="font-size:12px;">長按卡片看效果</span>
   </div>
   <div id="board">
     <div id="oppBand" class="band"></div>
@@ -68,6 +69,14 @@
   <div class="modal-box rules-box">
     <pre id="rulesText"></pre>
     <button id="rulesCloseBtn">關閉</button>
+  </div>
+</div>
+
+<div id="cardInfoOverlay" class="overlay hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="modal-box card-info-box">
+    <h3 id="cardInfoTitle"></h3>
+    <pre id="cardInfoText"></pre>
+    <button onclick="$('cardInfoOverlay').classList.add('hidden')">關閉</button>
   </div>
 </div>
 

@@ -235,3 +235,26 @@ button:hover { filter: brightness(1.1); }
   font-size: 13px;
   line-height: 1.6;
 }
+
+.card-info-box {
+  max-width: 360px;
+}
+.card-info-box pre {
+  white-space: pre-wrap;
+  font-family: "Microsoft JhengHei", sans-serif;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.has-card-info {
+  cursor: pointer;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.has-card-info:active {
+  filter: brightness(1.25);
+  transform: scale(0.97);
+  transition: transform 0.1s, filter 0.1s;
+}

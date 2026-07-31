@@ -1,4 +1,4 @@
-// 猜拳卡牌遊戲 — 網頁版主程式(大廳、房間、渲染、房主端遊戲迴圈)
+// 猜☆拳☆王 — 網頁版主程式(大廳、房間、渲染、房主端遊戲迴圈)
 
 let myUid = null;
 let roomCode = null;
@@ -316,6 +316,7 @@ function renderBand(container, snapshot, isOpp, privateData) {
     const b = document.createElement("span");
     b.className = "badge badge-star";
     b.textContent = `${t} ${snapshot.stars[t]}`;
+    attachCardInfo(b, t);
     starsEl.appendChild(b);
   });
   container.appendChild(starsEl);
@@ -357,7 +358,40 @@ function cardEl(name, kind) {
   const el = document.createElement("div");
   el.className = `card card-${kind}`;
   el.textContent = name;
+  attachCardInfo(el, name);
   return el;
+}
+
+// -- 長按看卡片效果 -----------------------------------------------
+
+function attachCardInfo(el, cardName) {
+  if (!CARD_EFFECTS[cardName]) return;
+  el.classList.add("has-card-info");
+  let timer = null;
+  let fired = false;
+  const start = () => {
+    fired = false;
+    timer = setTimeout(() => {
+      fired = true;
+      showCardInfo(cardName);
+    }, 450);
+  };
+  const cancel = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+  };
+  el.addEventListener("pointerdown", start);
+  el.addEventListener("pointerup", cancel);
+  el.addEventListener("pointerleave", cancel);
+  el.addEventListener("pointercancel", cancel);
+  el.addEventListener("contextmenu", (e) => { if (fired) e.preventDefault(); });
+}
+
+function showCardInfo(cardName) {
+  const kind = cardKind(cardName);
+  $("cardInfoTitle").textContent = `${cardName}(${CARD_KIND_LABEL[kind]})`;
+  $("cardInfoText").textContent = CARD_EFFECTS[cardName];
+  $("cardInfoOverlay").classList.remove("hidden");
 }
 
 function renderBattlefield(pub, oppKey, mineKey) {
@@ -415,6 +449,7 @@ function slotEl(header, content, kind, back) {
   const box = document.createElement("div");
   box.className = `slot-box ${content ? "slot-" + kind : "slot-empty"} ${back ? "slot-back" : ""}`;
   box.textContent = content ? content : "—";
+  if (content && !back) attachCardInfo(box, content);
   wrap.appendChild(box);
   return wrap;
 }

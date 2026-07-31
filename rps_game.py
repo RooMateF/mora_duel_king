@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-猜拳卡牌遊戲 — 圖形版(單人 vs AI)
+猜☆拳☆王 — 圖形版(單人 vs AI)
 規則邏輯共用 rps_core.py。僅使用 Python 標準函式庫(tkinter),不需額外安裝套件。
 
 目前卡片是用色塊+文字畫的簡易畫面,之後要換成 PNG 圖片時,
@@ -28,7 +28,7 @@ BG_BAND_MID = "#1b1d24"
 class GameGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("猜拳卡牌遊戲 — 圖形版")
+        self.root.title("猜☆拳☆王 — 圖形版")
         self.root.geometry("960x720")
         self.root.minsize(640, 480)
         self.game = None

@@ -1,4 +1,4 @@
-// 猜拳卡牌遊戲 — Firebase 連線層
+// 猜☆拳☆王 — Firebase 連線層
 // 需要先載入 firebase-app-compat.js / firebase-auth-compat.js / firebase-database-compat.js
 // 以及填好設定值的 firebase-config.js(見 README.md)。
 

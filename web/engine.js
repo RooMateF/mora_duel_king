@@ -1,4 +1,4 @@
-// 猜拳卡牌遊戲 — 遊戲引擎(對應 rps_core.py)
+// 猜☆拳☆王 — 遊戲引擎(對應 rps_core.py)
 // 雙人連線模式:只在「房主」的瀏覽器執行,房主 = p1,加入者 = p2。
 // 單人模式:new Game(ui, "你", "電腦", {vsAi:true, difficulty}) 時,p2 全部由內建 AI 決策,完全不會呼叫 ui。
 // this.ui 需提供以下介面(見 net.js / app.js 的 makeUi()):
@@ -237,24 +237,16 @@ class Game {
   // -- 太陽階段 -------------------------------------------------------
 
   async sunPhase(actor, other) {
-    let allowedPlays = 1;
-    let playsDone = 0;
-    let playedAny = false;
-    while (playsDone < allowedPlays) {
-      const card = await this.decideSunCard(actor);
-      if (!card) break;
-      playedAny = true;
+    const card = await this.decideSunCard(actor);
+    if (card) {
       actor.handSun.splice(actor.handSun.indexOf(card), 1);
       actor.playedSunCards.push(card);
-      playsDone += 1;
       if (card === "烈陽") {
-        const bonus = await this.resolveBlazingSun(actor, other);
-        if (bonus) allowedPlays += 1;
+        await this.resolveBlazingSun(actor, other);
       } else {
         await this.ui.log(`${actor.name} 打出太陽卡:${card}`);
       }
-    }
-    if (!playedAny) {
+    } else {
       await this.ui.log(`${actor.name} 沒有打出太陽卡。`);
     }
   }
@@ -291,50 +283,74 @@ class Game {
         other.moonDecided = true;
         await this.ui.log(`${other.name} 提前發動蓋著的【日蝕】反制!烈陽效果無效(烈陽直接進棄牌區)。`);
         await this.eclipseBonusDraw(other, actor);
-        return false;
+        return;
       }
     }
     const effect = this.isAiControlled(actor)
       ? this.aiDecideBlazingEffect(actor, other)
       : await this.ui.ask(actor.role, "烈陽效果(擇一)", "選擇要發動的效果:", [
-        { label: "效果一:偷看對手星星/月亮,可追加一張太陽(對手本回合被迫出月亮)", value: 1 },
-        { label: "效果二:指定自己或對手抽一張太陽/月亮卡", value: 2 },
+        { label: "效果一:指定自己或對手,從太陽或月亮牌庫抽一張牌", value: 1 },
+        { label: "效果二:偷看對手星星與蓋著的月亮卡,可選擇強制發動或強制丟棄那張月亮卡", value: 2 },
       ]);
     if (effect === 1) {
-      await this.ui.log(`${actor.name} 發動烈陽效果一:偷看 ${other.name} 的星星出牌與手上月亮卡,並可追加一張太陽卡。`);
-      if (!this.isAiControlled(actor)) {
-        const msg = `${other.name} 這回合暗中出的星星:${other.committedStar || "(無)"}\n` +
-          `${other.name} 手上的月亮卡:${other.handMoon.length ? other.handMoon.join("、") : "(無)"}`;
-        await this.ui.info(actor.role, "烈陽偷看結果", msg);
-      }
-      other.forcedMoon = true;
-      await this.ui.log(`(規則:${other.name} 本回合月亮階段必須打出並發動一張月亮卡,不能選不出)`);
-      return true;
-    } else {
       let target, pile;
       if (this.isAiControlled(actor)) {
         ({ target, pile } = this.aiDecideBlazingTarget(actor, other));
       } else {
-        const targetRole = await this.ui.ask(actor.role, "烈陽效果二 — 目標", "指定誰抽牌?", [
+        const targetRole = await this.ui.ask(actor.role, "烈陽效果一 — 目標", "指定誰抽牌?", [
           { label: `對手(${other.name})抽牌`, value: other.role },
           { label: `自己(${actor.name})抽牌`, value: actor.role },
         ]);
         target = this.byRole(targetRole || other.role);
-        pile = await this.ui.ask(actor.role, "烈陽效果二 — 牌堆", "指定抽哪一堆?", [
+        pile = await this.ui.ask(actor.role, "烈陽效果一 — 牌堆", "指定抽哪一堆?", [
           { label: "太陽牌庫", value: "太陽" },
           { label: "月亮牌庫", value: "月亮" },
         ]) || "太陽";
       }
-      await this.ui.log(`${actor.name} 發動烈陽效果二:指定 ${target.name} 從${pile}牌庫抽一張。`);
+      await this.ui.log(`${actor.name} 發動烈陽效果一:指定 ${target.name} 從${pile}牌庫抽一張。`);
       await this.forceDraw(target, target === actor ? other : actor, pile);
-      return false;
+    } else {
+      await this.ui.log(`${actor.name} 發動烈陽效果二:偷看 ${other.name} 的星星與蓋著的月亮卡。`);
+      const pending = other.pendingMoonCard;
+      if (!this.isAiControlled(actor)) {
+        const msg = `${other.name} 這回合暗中出的星星:${other.committedStar || "(無)"}\n` +
+          `${other.name} 蓋著的月亮卡:${pending || "(無)"}`;
+        await this.ui.info(actor.role, "烈陽偷看結果", msg);
+      }
+      if (!pending) {
+        await this.ui.log(`${other.name} 沒有蓋月亮卡,無牌可以強制。`);
+        return;
+      }
+      const choice = this.isAiControlled(actor)
+        ? this.aiDecideBlazingForcedChoice(actor, other)
+        : await this.ui.ask(actor.role, "烈陽效果二 — 強制發動或丟棄",
+          `${other.name} 蓋著【${pending}】,要強制發動還是強制丟棄?`, [
+            { label: "強制發動(月亮階段強制生效)", value: "activate" },
+            { label: "強制丟棄(直接作廢)", value: "discard" },
+          ]) || "discard";
+      if (choice === "discard") {
+        other.handMoon.splice(other.handMoon.indexOf(pending), 1);
+        other.discard.push(pending);
+        other.pendingMoonCard = null;
+        other.moonDecided = true;
+        await this.ui.log(`${actor.name} 強制丟棄 ${other.name} 蓋著的【${pending}】!`);
+      } else {
+        other.forcedMoon = true;
+        await this.ui.log(`${actor.name} 強制發動 ${other.name} 蓋著的【${pending}】!(月亮階段會強制生效)`);
+      }
     }
   }
 
   aiDecideBlazingEffect(actor, other) {
     const otherTotal = other.sunPile.length + other.moonPile.length;
-    if (otherTotal <= 2 && this.difficulty !== "easy") return 2;
+    if (otherTotal <= 2 && this.difficulty !== "easy") return 1;
     return Math.random() < 0.5 ? 1 : 2;
+  }
+
+  aiDecideBlazingForcedChoice(actor, other) {
+    // 強制丟棄通常比較安全:不會意外幫到對方,也不會反過來打掉自己剛升級的太陽卡
+    const chanceDiscard = { easy: 0.5, normal: 0.75, hard: 0.9 }[this.difficulty];
+    return Math.random() < chanceDiscard ? "discard" : "activate";
   }
 
   aiDecideBlazingTarget(actor, other) {
