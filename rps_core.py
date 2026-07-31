@@ -2,7 +2,7 @@
 猜拳卡牌遊戲 — 共用規則引擎(文字版 / 圖形版共用)
 規則來源:RPS_Card_Game_Design.md,以及後續追加規則:
   - 烈陽效果一:偷看後,對手本回合月亮階段必須打出並發動一張月亮卡(不能選不出)。
-  - 日蝕反制烈陽成功:反制方可再指定自己或對手,各抽一張太陽牌與一張月亮牌。
+  - 日蝕反制烈陽成功:反制方可再指定自己或對手,抽兩張牌(太陽、月亮牌庫自由選,不限一邊一張)。
   - 平手抽牌:只要太陽或月亮牌庫還有牌就強制抽一張(自選堆);兩堆皆空才可不抽、不判負。
 
 此模組不依賴任何 GUI 套件。UI(文字版 rps_text.py / 圖形版 rps_game.py)
@@ -50,7 +50,7 @@ RULES_TEXT = """\
 雙方輪流出牌,誰先被逼到「太陽牌庫和月亮牌庫都抽不出牌」,誰就輸了。
 
 【每回合基本流程】
-1. 雙方各出一張「星星卡」(石頭/布/剪刀),這是每回合必出、決定勝負的主軸。
+1. 雙方各出一張「星星卡」(石頭/布/剪刀),這是每回合決定勝負的主軸。
 2. 雙方也可以打「太陽卡」讓自己的星星升級,或打「月亮卡」偷改自己的星星、干擾對方。
 3. 比完出招後,輸的人被拿走一張星星卡、還要抽牌;贏的人不用抽牌。
 
@@ -80,7 +80,7 @@ RULES_TEXT = """\
   在月亮階段,把「自己」這回合出的星星直接換成指定的那一種(即使之前升級過,也會蓋掉、變回換成的那個基本星星)。
 - 日蝕(必須先蓋出去才能用,二選一效果,擇一使用後這張就用掉了):
   A. 反制烈陽:對方打出烈陽的當下,可以提前發動蓋著的日蝕,讓那次烈陽失效、直接報廢。
-     反制成功後,你可以再指定自己或對方,各抽一張太陽牌+一張月亮牌。
+     反制成功後,你可以再指定自己或對方,抽兩張牌(太陽、月亮牌庫自由選,不限一邊一張)。
   B. 主動使用:如果沒有拿去反制,月亮階段可以正常發動,讓對方這回合打出的太陽卡效果直接失效。
 
 【勝負與抽牌(簡化版)】
@@ -98,7 +98,7 @@ RULES_TEXT = """\
 3. 完全沒星星可出:若手上三種星星卡都已是 0 張,本回合視為出不了牌,直接算輸掉這回合。
 4. 效果套用順序:星星底牌 → 太陽升級(型別相符才生效) → 月亮偷變(會蓋掉升級結果) → 日蝕主動效果(使對方太陽失效)。
 5. 烈陽逼抽的邊界:指定的那一堆已空 → 不執行、無事發生;但若指定對象的太陽、月亮兩堆「同時」都空 → 該對象直接判負。
-6. 一般抽牌(輸家抽2張 / 日蝕獎勵抽2張)的邊界:某一堆空了就只抽另一堆;若兩堆同時都空 → 判負。
+6. 抽牌邊界:輸家抽2張是固定太陽+月亮各一張,某一堆空了就只抽另一堆;日蝕獎勵抽2張則是自由選堆、抽兩次,每次抽牌時若太陽、月亮兩堆同時都空 → 判負。
 7. 星星卡總數固定 18 張(雙方各 9 張)在雙方之間流動,贏家拿走的星星會計入自己該型別持有量,之後可能再被對方贏回去。
 """
 
@@ -231,11 +231,38 @@ class Game:
         hand.append(c)
         self.gui.log(f"{target.name} 被指定從{pile_name}牌庫抽牌。" + (f"(抽到:{c})" if target is self.human else ""))
 
+    def free_draw_one(self, player, opponent):
+        """抽一張牌,自由選太陽或月亮牌庫(某堆空就抽另一堆,兩堆都空則判負)。"""
+        has_sun = bool(player.sun_pile)
+        has_moon = bool(player.moon_pile)
+        if not has_sun and not has_moon:
+            self.gui.log(f"{player.name} 太陽與月亮牌庫皆空,無法抽牌 —— 判負!")
+            raise GameOver(winner=opponent)
+        if has_sun and has_moon:
+            if player is self.human:
+                pile = self.gui.choose(
+                    "選擇要抽的牌堆",
+                    f"{player.name},選擇要抽太陽還是月亮牌庫:",
+                    [(f"太陽牌庫(剩{len(player.sun_pile)})", "太陽"),
+                     (f"月亮牌庫(剩{len(player.moon_pile)})", "月亮")],
+                )
+                if pile is None:
+                    pile = "太陽"
+            else:
+                pile = random.choice(["太陽", "月亮"])
+        else:
+            pile = "太陽" if has_sun else "月亮"
+        pile_list = player.sun_pile if pile == "太陽" else player.moon_pile
+        hand = player.hand_sun if pile == "太陽" else player.hand_moon
+        c = pile_list.pop()
+        hand.append(c)
+        self.gui.log(f"{player.name} 從{pile}牌庫抽了一張牌。" + (f"(抽到:{c})" if player is self.human else ""))
+
     def eclipse_bonus_draw(self, defender, attacker):
         if defender is self.human:
             target = self.gui.choose(
                 "日蝕反制獎勵",
-                "成功反制烈陽!選擇由誰各抽一張太陽牌+一張月亮牌:",
+                "成功反制烈陽!選擇由誰抽兩張牌(太陽、月亮牌庫自由選):",
                 [(f"自己({defender.name})", defender), (f"對手({attacker.name})", attacker)],
             )
             if target is None:
@@ -243,8 +270,9 @@ class Game:
         else:
             target = self.ai_decide_eclipse_bonus_target(defender, attacker)
         other = attacker if target is defender else defender
-        self.gui.log(f"{defender.name} 選擇讓 {target.name} 各抽一張太陽牌與月亮牌。")
-        self.mandatory_draw(target, other)
+        self.gui.log(f"{defender.name} 選擇讓 {target.name} 抽兩張牌。")
+        self.free_draw_one(target, other)
+        self.free_draw_one(target, other)
 
     def ai_decide_eclipse_bonus_target(self, defender, attacker):
         attacker_total = len(attacker.sun_pile) + len(attacker.moon_pile)
@@ -264,7 +292,7 @@ class Game:
         if player is self.human:
             opts = [(f"{t}(剩{player.stars[t]}張)", t) for t in available]
             choice = self.gui.choose(
-                "出星星卡(必出、蓋牌)",
+                "出星星卡(蓋牌)",
                 "選擇這回合要出的星星卡(雙方同時決定,對方看不到):",
                 opts,
             )
@@ -363,7 +391,7 @@ class Game:
             return self.gui.confirm(
                 "日蝕反制",
                 f"{attacker.name} 打出了【烈陽】!你蓋著一張日蝕,是否提前發動來反制,使其效果無效?"
-                f"\n(成功反制後,可再指定自己或對手各抽一張太陽+月亮牌;"
+                f"\n(成功反制後,可再指定自己或對手抽兩張牌,太陽、月亮牌庫自由選;"
                 f"這張日蝕會直接用掉,月亮階段就不會再有它了)",
             )
         chance = {"easy": 0.2, "normal": 0.5, "hard": 0.8}[self.difficulty]

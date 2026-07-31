@@ -150,13 +150,42 @@ class Game {
     await this.ui.log(`${target.name} 被指定從${pileName}牌庫抽牌。`);
   }
 
+  async freeDrawOne(player, opponent) {
+    const hasSun = player.sunPile.length > 0;
+    const hasMoon = player.moonPile.length > 0;
+    if (!hasSun && !hasMoon) {
+      await this.ui.log(`${player.name} 太陽與月亮牌庫皆空,無法抽牌 —— 判負!`);
+      throw new GameOverError(opponent.role);
+    }
+    let pile;
+    if (hasSun && hasMoon) {
+      if (this.isAiControlled(player)) {
+        pile = Math.random() < 0.5 ? "太陽" : "月亮";
+      } else {
+        pile = await this.ui.ask(player.role, "選擇要抽的牌堆",
+          `${player.name},選擇要抽太陽還是月亮牌庫:`,
+          [
+            { label: `太陽牌庫(剩${player.sunPile.length})`, value: "太陽" },
+            { label: `月亮牌庫(剩${player.moonPile.length})`, value: "月亮" },
+          ]);
+        if (!pile) pile = "太陽";
+      }
+    } else {
+      pile = hasSun ? "太陽" : "月亮";
+    }
+    const pileList = pile === "太陽" ? player.sunPile : player.moonPile;
+    const hand = pile === "太陽" ? player.handSun : player.handMoon;
+    hand.push(pileList.pop());
+    await this.ui.log(`${player.name} 從${pile}牌庫抽了一張牌。`);
+  }
+
   async eclipseBonusDraw(defender, attacker) {
     let target;
     if (this.isAiControlled(defender)) {
       target = this.aiDecideEclipseBonusTarget(defender, attacker);
     } else {
       const targetRole = await this.ui.ask(defender.role, "日蝕反制獎勵",
-        "成功反制烈陽!選擇由誰各抽一張太陽牌+一張月亮牌:",
+        "成功反制烈陽!選擇由誰抽兩張牌(太陽、月亮牌庫自由選):",
         [
           { label: `自己(${defender.name})`, value: defender.role },
           { label: `對手(${attacker.name})`, value: attacker.role },
@@ -164,8 +193,9 @@ class Game {
       target = this.byRole(targetRole || defender.role);
     }
     const otherP = this.other(target);
-    await this.ui.log(`${defender.name} 選擇讓 ${target.name} 各抽一張太陽牌與月亮牌。`);
-    await this.mandatoryDraw(target, otherP);
+    await this.ui.log(`${defender.name} 選擇讓 ${target.name} 抽兩張牌。`);
+    await this.freeDrawOne(target, otherP);
+    await this.freeDrawOne(target, otherP);
   }
 
   aiDecideEclipseBonusTarget(defender, attacker) {
@@ -182,7 +212,7 @@ class Game {
     const available = STAR_TYPES.filter((t) => player.stars[t] > 0);
     if (!available.length) return null;
     if (this.isAiControlled(player)) return this.aiChooseStar(player, available);
-    const choice = await this.ui.ask(player.role, "出星星卡(必出、蓋牌)",
+    const choice = await this.ui.ask(player.role, "出星星卡(蓋牌)",
       "選擇這回合要出的星星卡(雙方同時決定,對方看不到):",
       available.map((t) => ({ label: `${t}(剩${player.stars[t]}張)`, value: t })));
     return choice || available[0];
@@ -323,7 +353,7 @@ class Game {
     }
     return await this.ui.confirm(defender.role, "日蝕反制",
       `${attacker.name} 打出了【烈陽】!你蓋著一張日蝕,是否提前發動來反制,使其效果無效?` +
-      `\n(成功反制後,可再指定自己或對手各抽一張太陽+月亮牌;這張日蝕會直接用掉,月亮階段就不會再有它了)`);
+      `\n(成功反制後,可再指定自己或對手抽兩張牌,太陽、月亮牌庫自由選;這張日蝕會直接用掉,月亮階段就不會再有它了)`);
   }
 
   // -- 星星揭示 ---------------------------------------------------
