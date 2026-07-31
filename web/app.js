@@ -314,13 +314,14 @@ function renderBand(container, snapshot, isOpp, privateData) {
   const askKind = !isOpp && pendingAsk ? pendingAsk.kind : null;
   if (askKind === "star" || askKind === "sun" || askKind === "moonCommit") {
     container.appendChild(actionPromptEl(pendingAsk.prompt));
+    if (armedValue !== null) container.appendChild(confirmBarEl());
   }
 
   const starsRow = document.createElement("div");
   starsRow.className = "star-row";
   STAR_TYPES.forEach((t) => {
     const selectable = askKind === "star" && pendingAsk.options.some((o) => o.value === t);
-    starsRow.appendChild(handCardTile(t, "star", snapshot.stars[t], selectable ? () => resolvePendingAsk(t) : null));
+    starsRow.appendChild(handCardTile(t, "star", snapshot.stars[t], selectable ? () => resolvePendingAsk(t) : null, t));
   });
   container.appendChild(starsRow);
 
@@ -342,11 +343,11 @@ function renderBand(container, snapshot, isOpp, privateData) {
     const moonPickable = askKind === "moonCommit";
     (priv.handSun || []).forEach((c) => {
       const selectable = sunPickable && pendingAsk.options.some((o) => o.value === c);
-      handEl.appendChild(handCardTile(c, "sun", null, selectable ? () => resolvePendingAsk(c) : null));
+      handEl.appendChild(handCardTile(c, "sun", null, selectable ? () => resolvePendingAsk(c) : null, c));
     });
     (priv.handMoon || []).forEach((c) => {
       const selectable = moonPickable && pendingAsk.options.some((o) => o.value === c);
-      handEl.appendChild(handCardTile(c, "moon", null, selectable ? () => resolvePendingAsk(c) : null));
+      handEl.appendChild(handCardTile(c, "moon", null, selectable ? () => resolvePendingAsk(c) : null, c));
     });
     if (!(priv.handSun || []).length && !(priv.handMoon || []).length) {
       const span = document.createElement("span");
@@ -393,9 +394,10 @@ function cardImgSrc(name) {
   return `cards/${encodeURIComponent(name)}.svg`;
 }
 
-function handCardTile(name, kind, count, onTap) {
+function handCardTile(name, kind, count, onTap, value) {
   const wrap = document.createElement("div");
-  wrap.className = "hand-card-wrap";
+  const isArmed = onTap && armedValue !== null && value !== undefined && armedValue === value;
+  wrap.className = "hand-card-wrap" + (isArmed ? " armed" : "");
   const img = document.createElement("img");
   img.className = `hand-card card-${kind}` + (onTap ? " selectable" : "");
   img.src = cardImgSrc(name);
@@ -404,10 +406,10 @@ function handCardTile(name, kind, count, onTap) {
   attachInteractiveCard(img, {
     cardName: name,
     onConfirm: onTap || null,
+    onArm: onTap ? () => armValue(value) : null,
     draggable: !!onTap,
     dropSelector: onTap ? dropSelectorForKind(kind) : null,
     ariaLabel: onTap ? `打出 ${name}` : null,
-    wrapEl: wrap,
   });
   wrap.appendChild(img);
   if (count !== null && count !== undefined) {
@@ -434,9 +436,30 @@ function actionPromptEl(text) {
   return el;
 }
 
+function confirmBarEl() {
+  const bar = document.createElement("div");
+  bar.className = "confirm-bar";
+  const opt = pendingAsk && pendingAsk.options.find((o) => o.value === armedValue);
+  const label = opt ? opt.label : "此選擇";
+
+  const confirmBtn = document.createElement("button");
+  confirmBtn.className = "confirm-btn";
+  confirmBtn.textContent = `確認出牌:${label}`;
+  confirmBtn.onclick = () => resolvePendingAsk(armedValue);
+  bar.appendChild(confirmBtn);
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className = "confirm-cancel-btn";
+  cancelBtn.textContent = "取消選擇";
+  cancelBtn.onclick = () => resetArmed();
+  bar.appendChild(cancelBtn);
+
+  return bar;
+}
+
 function resolvePendingAsk(value) {
   if (!pendingAsk) return;
-  clearArmed();
+  resetArmed();
   const resolve = pendingAsk.resolve;
   pendingAsk = null;
   resolve(value);
@@ -444,24 +467,28 @@ function resolvePendingAsk(value) {
 
 function showCardPickUI(title, prompt, options, kind) {
   return new Promise((resolve) => {
-    clearArmed();
+    resetArmed();
     pendingAsk = { title, prompt, options, kind, resolve };
     if (lastPublicSeen) renderPublic(lastPublicSeen);
   });
 }
 
-// -- 卡片互動:長按看效果 / 點兩下確認出牌 / 拖曳到欄位出牌 -------------
+// -- 卡片互動:長按看效果 / 點卡標記+按鈕確認出牌 / 拖曳到欄位出牌 -----
 
 const DRAG_THRESHOLD = 8;
 const LONG_PRESS_MS = 450;
 
-let armedEl = null;
-let armedWrapEl = null;
+let armedValue = null; // 目前被「點過一次、等待按確認鈕」標記的選項值
 
-function clearArmed() {
-  if (armedWrapEl) armedWrapEl.classList.remove("armed");
-  armedEl = null;
-  armedWrapEl = null;
+function armValue(value) {
+  armedValue = value;
+  if (lastPublicSeen) renderPublic(lastPublicSeen);
+}
+
+function resetArmed() {
+  if (armedValue === null) return;
+  armedValue = null;
+  if (lastPublicSeen) renderPublic(lastPublicSeen);
 }
 
 function dropSelectorForKind(kind) {
@@ -472,18 +499,22 @@ function dropSelectorForKind(kind) {
 }
 
 // el: 顯示卡圖的 <img>。cardName: 用於長按看效果(沒有效果文字就不啟用長按)。
-// onConfirm: 確認出牌/發動時要執行的動作。draggable: 是否允許拖到 dropSelector 指定的欄位放開直接出牌。
-// 點擊行為採「點一下標記、再點一下確認」,避免手滑誤觸;拖曳放開在合法欄位上則視同確認,不需要再點一次。
+// onConfirm: 拖曳放到合法欄位、或鍵盤 Enter/Space 時立即執行的動作。
+// onArm: 單純點一下(沒有拖曳、沒有觸發長按)時執行,用來標記選取,實際出牌要靠畫面上的確認鈕。
+// draggable: 是否允許拖到 dropSelector 指定的欄位放開直接出牌。
 function attachInteractiveCard(el, opts) {
-  const { cardName, onConfirm, draggable, dropSelector, ariaLabel, wrapEl } = opts;
-  const targetWrap = wrapEl || el;
+  const { cardName, onConfirm, onArm, draggable, dropSelector, ariaLabel } = opts;
 
-  if (onConfirm) {
+  if (onConfirm || onArm) {
     el.setAttribute("role", "button");
     el.setAttribute("tabindex", "0");
     if (ariaLabel) el.setAttribute("aria-label", ariaLabel);
     el.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onConfirm(); }
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        if (onConfirm) onConfirm();
+        else if (onArm) onArm();
+      }
     });
   }
   if (cardName && CARD_EFFECTS[cardName]) {
@@ -495,6 +526,7 @@ function attachInteractiveCard(el, opts) {
   let dragging = false;
   let moved = false;
   let startX = 0, startY = 0;
+  let grabOffsetX = 0, grabOffsetY = 0;
   let ghost = null;
   let overTarget = null;
   let activePointerId = null;
@@ -525,6 +557,10 @@ function attachInteractiveCard(el, opts) {
     moved = false;
     startX = e.clientX;
     startY = e.clientY;
+    const rect = el.getBoundingClientRect();
+    // 記住手指/滑鼠抓住卡片的相對位置,拖曳時 ghost 才會跟著這個抓點走,而不是瞬間跳到置中
+    grabOffsetX = startX - rect.left;
+    grabOffsetY = startY - rect.top;
     activePointerId = e.pointerId;
     try { el.setPointerCapture(activePointerId); } catch (_) { /* 不支援時忽略 */ }
     if (cardName && CARD_EFFECTS[cardName]) {
@@ -557,7 +593,7 @@ function attachInteractiveCard(el, opts) {
       }
     }
     if (dragging && ghost) {
-      ghost.style.transform = `translate(${e.clientX - ghost.offsetWidth / 2}px, ${e.clientY - ghost.offsetHeight / 2}px)`;
+      ghost.style.transform = `translate(${e.clientX - grabOffsetX}px, ${e.clientY - grabOffsetY}px)`;
       const target = findDropTarget(e.clientX, e.clientY);
       if (target !== overTarget) {
         if (overTarget) overTarget.classList.remove("drop-target-hover");
@@ -581,16 +617,9 @@ function attachInteractiveCard(el, opts) {
       return;
     }
     clearDragVisuals();
-    if (canceled || infoFired || moved || !onConfirm) return;
-    if (armedEl === el) {
-      clearArmed();
-      onConfirm();
-    } else {
-      clearArmed();
-      armedEl = el;
-      armedWrapEl = targetWrap;
-      targetWrap.classList.add("armed");
-    }
+    if (canceled || infoFired || moved) return;
+    if (onArm) onArm();
+    else if (onConfirm) onConfirm();
   }
 
   el.addEventListener("pointerup", (e) => endPointer(e, false));
@@ -628,7 +657,10 @@ function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
   col.appendChild(label);
 
   const moonActivateAsk = !isOpp && pendingAsk && pendingAsk.kind === "moonActivate" ? pendingAsk : null;
-  if (moonActivateAsk) col.appendChild(actionPromptEl(moonActivateAsk.prompt));
+  if (moonActivateAsk) {
+    col.appendChild(actionPromptEl(moonActivateAsk.prompt));
+    if (armedValue !== null) col.appendChild(confirmBarEl());
+  }
 
   const row = document.createElement("div");
   row.className = "bf-row";
@@ -654,7 +686,7 @@ function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
     moonContent = privateData.pendingMoonCard;
     if (moonActivateAsk) moonTap = () => resolvePendingAsk(true);
   }
-  row.appendChild(slotEl("月亮", moonContent, "moon", moonBack, moonTap, !isOpp ? "moon" : null));
+  row.appendChild(slotEl("月亮", moonContent, "moon", moonBack, moonTap, !isOpp ? "moon" : null, true));
 
   col.appendChild(row);
 
@@ -666,9 +698,10 @@ function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
   return col;
 }
 
-function slotEl(header, content, kind, back, onTap, dropKind) {
+function slotEl(header, content, kind, back, onTap, dropKind, value) {
   const wrap = document.createElement("div");
-  wrap.className = "slot-wrap";
+  const isArmed = onTap && armedValue !== null && value !== undefined && armedValue === value;
+  wrap.className = "slot-wrap" + (isArmed ? " armed" : "");
   if (dropKind) wrap.dataset.dropKind = dropKind;
   const h = document.createElement("div");
   h.className = "slot-header";
@@ -694,9 +727,9 @@ function slotEl(header, content, kind, back, onTap, dropKind) {
     attachInteractiveCard(img, {
       cardName: content,
       onConfirm: onTap || null,
+      onArm: onTap ? () => armValue(value) : null,
       draggable: false,
       ariaLabel: onTap ? `發動 ${content}` : null,
-      wrapEl: wrap,
     });
     wrap.appendChild(img);
     return wrap;
