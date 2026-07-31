@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>猜拳卡牌遊戲 — 雙人連線版</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="lobby" class="screen">
+  <h1>猜拳卡牌遊戲</h1>
+  <p class="subtitle">雙人連線版</p>
+  <input id="nameInput" type="text" placeholder="輸入你的名字" maxlength="12">
+  <div class="lobby-actions">
+    <div class="lobby-card">
+      <h3>建立新房間</h3>
+      <button id="createBtn">建立房間</button>
+    </div>
+    <div class="lobby-card">
+      <h3>加入房間</h3>
+      <input id="codeInput" type="text" placeholder="房間代碼" maxlength="5">
+      <button id="joinBtn">加入房間</button>
+    </div>
+    <div class="lobby-card">
+      <h3>單人對戰 AI</h3>
+      <div class="diff-buttons">
+        <button data-diff="easy" class="diffBtn">簡單</button>
+        <button data-diff="normal" class="diffBtn">普通</button>
+        <button data-diff="hard" class="diffBtn">困難</button>
+      </div>
+    </div>
+  </div>
+  <div id="lobbyMsg" class="msg"></div>
+  <button id="rulesBtnLobby" class="link-btn" onclick="showRules()">規則說明</button>
+</div>
+
+<div id="waiting" class="screen hidden">
+  <h2>房間已建立</h2>
+  <p>把這個代碼給對方,請他輸入代碼加入:</p>
+  <div id="roomCodeDisplay" class="room-code"></div>
+  <button id="copyCodeBtn">複製代碼</button>
+  <p class="dim">等待對手加入...</p>
+</div>
+
+<div id="gameScreen" class="screen hidden">
+  <div id="topBar">
+    <button id="rulesBtn">規則說明</button>
+    <span id="statusText"></span>
+  </div>
+  <div id="board">
+    <div id="oppBand" class="band"></div>
+    <div id="battlefield" class="band bf"></div>
+    <div id="myBand" class="band"></div>
+  </div>
+  <div id="logPanel"></div>
+</div>
+
+<div id="modalOverlay" class="overlay hidden">
+  <div class="modal-box">
+    <h3 id="modalTitle"></h3>
+    <p id="modalPrompt"></p>
+    <div id="modalButtons" class="modal-buttons"></div>
+  </div>
+</div>
+
+<div id="rulesOverlay" class="overlay hidden">
+  <div class="modal-box rules-box">
+    <pre id="rulesText"></pre>
+    <button id="rulesCloseBtn">關閉</button>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="rules.js"></script>
+<script src="engine.js"></script>
+<script src="net.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

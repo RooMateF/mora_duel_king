@@ -1,0 +1,33 @@
+{
+  "rules": {
+    "rooms": {
+      "$roomCode": {
+        "meta": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        },
+        "public": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        },
+        "private": {
+          "$uid": {
+            ".read": "auth.uid === $uid",
+            ".write": "auth.uid === $uid || auth.uid === root.child('rooms/'+$roomCode+'/meta/hostUid').val()"
+          }
+        },
+        "rpc": {
+          "$uid": {
+            ".read": "auth != null",
+            "request": {
+              ".write": "auth != null"
+            },
+            "response": {
+              ".write": "auth.uid === $uid"
+            }
+          }
+        }
+      }
+    }
+  }
+}
