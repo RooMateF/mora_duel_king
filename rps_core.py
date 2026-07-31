@@ -439,7 +439,8 @@ class Game:
                 f"\n(成功反制後,可再指定自己或對手抽兩張牌,太陽、月亮牌庫自由選;"
                 f"這張日蝕會直接用掉,月亮階段就不會再有它了)",
             )
-        chance = {"easy": 0.2, "normal": 0.5, "hard": 0.8}[self.difficulty]
+        # 反制幾乎穩賺:烈陽直接無效+還能抽兩張牌,不反制的話對手很可能直接用效果二把這張日蝕強制丟棄、什麼都拿不到
+        chance = {"easy": 0.35, "normal": 0.85, "hard": 1.0}[self.difficulty]
         return random.random() < chance
 
     def decide_blazing_effect(self, actor):

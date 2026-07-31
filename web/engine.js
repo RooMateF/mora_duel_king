@@ -366,7 +366,8 @@ class Game {
     // 日蝕要先蓋牌才能發動(跟所有月亮卡一樣),反制烈陽時可以提前發動蓋著的日蝕
     if (defender.pendingMoonCard !== "日蝕") return false;
     if (this.isAiControlled(defender)) {
-      const chance = { easy: 0.2, normal: 0.5, hard: 0.8 }[this.difficulty];
+      // 反制幾乎穩賺:烈陽直接無效+還能抽兩張牌,不反制的話對手很可能直接用效果二把這張日蝕強制丟棄、什麼都拿不到
+      const chance = { easy: 0.35, normal: 0.85, hard: 1 }[this.difficulty];
       return Math.random() < chance;
     }
     return await this.ui.confirm(defender.role, "日蝕反制",
