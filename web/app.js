@@ -401,16 +401,14 @@ function handCardTile(name, kind, count, onTap) {
   img.src = cardImgSrc(name);
   img.alt = name;
   img.draggable = false;
-  attachCardInfo(img, name);
-  if (onTap) {
-    img.setAttribute("role", "button");
-    img.setAttribute("tabindex", "0");
-    img.setAttribute("aria-label", `打出 ${name}`);
-    img.addEventListener("click", onTap);
-    img.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onTap(); }
-    });
-  }
+  attachInteractiveCard(img, {
+    cardName: name,
+    onConfirm: onTap || null,
+    draggable: !!onTap,
+    dropSelector: onTap ? dropSelectorForKind(kind) : null,
+    ariaLabel: onTap ? `打出 ${name}` : null,
+    wrapEl: wrap,
+  });
   wrap.appendChild(img);
   if (count !== null && count !== undefined) {
     const badge = document.createElement("span");
@@ -438,6 +436,7 @@ function actionPromptEl(text) {
 
 function resolvePendingAsk(value) {
   if (!pendingAsk) return;
+  clearArmed();
   const resolve = pendingAsk.resolve;
   pendingAsk = null;
   resolve(value);
@@ -445,41 +444,162 @@ function resolvePendingAsk(value) {
 
 function showCardPickUI(title, prompt, options, kind) {
   return new Promise((resolve) => {
+    clearArmed();
     pendingAsk = { title, prompt, options, kind, resolve };
     if (lastPublicSeen) renderPublic(lastPublicSeen);
   });
 }
 
-// -- 長按看卡片效果 -----------------------------------------------
+// -- 卡片互動:長按看效果 / 點兩下確認出牌 / 拖曳到欄位出牌 -------------
 
-function attachCardInfo(el, cardName) {
-  if (!CARD_EFFECTS[cardName]) return;
-  el.classList.add("has-card-info");
-  let timer = null;
-  let fired = false;
-  const start = () => {
-    fired = false;
-    timer = setTimeout(() => {
-      fired = true;
-      showCardInfo(cardName);
-    }, 450);
-  };
-  const cancel = () => {
-    if (timer) clearTimeout(timer);
-    timer = null;
-  };
-  el.addEventListener("pointerdown", start);
-  el.addEventListener("pointerup", cancel);
-  el.addEventListener("pointerleave", cancel);
-  el.addEventListener("pointercancel", cancel);
-  el.addEventListener("contextmenu", (e) => { if (fired) e.preventDefault(); });
-  // 長按放開後瀏覽器還是會補發一個 click,這裡攔下來,避免看完效果又立刻誤觸出牌
-  el.addEventListener("click", (e) => {
-    if (fired) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      fired = false;
+const DRAG_THRESHOLD = 8;
+const LONG_PRESS_MS = 450;
+
+let armedEl = null;
+let armedWrapEl = null;
+
+function clearArmed() {
+  if (armedWrapEl) armedWrapEl.classList.remove("armed");
+  armedEl = null;
+  armedWrapEl = null;
+}
+
+function dropSelectorForKind(kind) {
+  if (kind === "star" || kind === "sun" || kind === "moon") {
+    return `.slot-wrap[data-drop-kind="${kind}"]`;
+  }
+  return null;
+}
+
+// el: 顯示卡圖的 <img>。cardName: 用於長按看效果(沒有效果文字就不啟用長按)。
+// onConfirm: 確認出牌/發動時要執行的動作。draggable: 是否允許拖到 dropSelector 指定的欄位放開直接出牌。
+// 點擊行為採「點一下標記、再點一下確認」,避免手滑誤觸;拖曳放開在合法欄位上則視同確認,不需要再點一次。
+function attachInteractiveCard(el, opts) {
+  const { cardName, onConfirm, draggable, dropSelector, ariaLabel, wrapEl } = opts;
+  const targetWrap = wrapEl || el;
+
+  if (onConfirm) {
+    el.setAttribute("role", "button");
+    el.setAttribute("tabindex", "0");
+    if (ariaLabel) el.setAttribute("aria-label", ariaLabel);
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onConfirm(); }
+    });
+  }
+  if (cardName && CARD_EFFECTS[cardName]) {
+    el.classList.add("has-card-info");
+  }
+
+  let infoTimer = null;
+  let infoFired = false;
+  let dragging = false;
+  let moved = false;
+  let startX = 0, startY = 0;
+  let ghost = null;
+  let overTarget = null;
+  let activePointerId = null;
+
+  function clearInfoTimer() {
+    if (infoTimer) clearTimeout(infoTimer);
+    infoTimer = null;
+  }
+
+  function clearDragVisuals() {
+    if (ghost) { ghost.remove(); ghost = null; }
+    if (overTarget) { overTarget.classList.remove("drop-target-hover"); overTarget = null; }
+    document.querySelectorAll(".drop-target-active").forEach((n) => n.classList.remove("drop-target-active"));
+    el.classList.remove("dragging-source");
+    dragging = false;
+  }
+
+  function findDropTarget(x, y) {
+    if (!dropSelector) return null;
+    const under = document.elementFromPoint(x, y);
+    if (!under) return null;
+    return under.closest(dropSelector);
+  }
+
+  el.addEventListener("pointerdown", (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    infoFired = false;
+    moved = false;
+    startX = e.clientX;
+    startY = e.clientY;
+    activePointerId = e.pointerId;
+    try { el.setPointerCapture(activePointerId); } catch (_) { /* 不支援時忽略 */ }
+    if (cardName && CARD_EFFECTS[cardName]) {
+      infoTimer = setTimeout(() => {
+        infoFired = true;
+        showCardInfo(cardName);
+      }, LONG_PRESS_MS);
     }
+    if (draggable && dropSelector) {
+      document.querySelectorAll(dropSelector).forEach((n) => n.classList.add("drop-target-active"));
+    }
+  });
+
+  el.addEventListener("pointermove", (e) => {
+    if (activePointerId === null || e.pointerId !== activePointerId) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (!moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+      moved = true;
+      clearInfoTimer();
+      if (draggable) {
+        dragging = true;
+        el.classList.add("dragging-source");
+        const rect = el.getBoundingClientRect();
+        ghost = el.cloneNode(true);
+        ghost.classList.add("drag-ghost");
+        ghost.style.width = `${rect.width}px`;
+        ghost.style.height = `${rect.height}px`;
+        document.body.appendChild(ghost);
+      }
+    }
+    if (dragging && ghost) {
+      ghost.style.transform = `translate(${e.clientX - ghost.offsetWidth / 2}px, ${e.clientY - ghost.offsetHeight / 2}px)`;
+      const target = findDropTarget(e.clientX, e.clientY);
+      if (target !== overTarget) {
+        if (overTarget) overTarget.classList.remove("drop-target-hover");
+        overTarget = target;
+        if (overTarget) overTarget.classList.add("drop-target-hover");
+      }
+    }
+  });
+
+  function endPointer(e, canceled) {
+    if (activePointerId === null) return;
+    if (e && e.pointerId !== undefined && e.pointerId !== activePointerId) return;
+    clearInfoTimer();
+    try { el.releasePointerCapture(activePointerId); } catch (_) { /* 不支援時忽略 */ }
+    activePointerId = null;
+
+    if (dragging) {
+      const dropped = !canceled && overTarget;
+      clearDragVisuals();
+      if (dropped && onConfirm) onConfirm();
+      return;
+    }
+    clearDragVisuals();
+    if (canceled || infoFired || moved || !onConfirm) return;
+    if (armedEl === el) {
+      clearArmed();
+      onConfirm();
+    } else {
+      clearArmed();
+      armedEl = el;
+      armedWrapEl = targetWrap;
+      targetWrap.classList.add("armed");
+    }
+  }
+
+  el.addEventListener("pointerup", (e) => endPointer(e, false));
+  el.addEventListener("pointercancel", (e) => endPointer(e, true));
+
+  // pointerup 後瀏覽器仍會補發一個 click,一律攔下,避免和上面的邏輯重複觸發
+  el.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
   });
 }
 
@@ -513,7 +633,7 @@ function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
   const row = document.createElement("div");
   row.className = "bf-row";
 
-  row.appendChild(slotEl("太陽", snapshot.playedSun && snapshot.playedSun.length ? snapshot.playedSun.join("、") : null, "sun"));
+  row.appendChild(slotEl("太陽", snapshot.playedSun && snapshot.playedSun.length ? snapshot.playedSun.join("、") : null, "sun", false, null, !isOpp ? "sun" : null));
 
   let starContent = null, starBack = false;
   if (isOpp) {
@@ -523,7 +643,7 @@ function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
     // 自己的星星就算還沒公開,也可以透過私密資料立刻看到自己蓋了什麼
     starContent = snapshot.star || (privateData && privateData.committedStar) || null;
   }
-  row.appendChild(slotEl("星星", starContent, "star", starBack));
+  row.appendChild(slotEl("星星", starContent, "star", starBack, null, !isOpp ? "star" : null));
 
   let moonContent = null, moonBack = false, moonTap = null;
   if (snapshot.playedMoon) {
@@ -534,7 +654,7 @@ function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
     moonContent = privateData.pendingMoonCard;
     if (moonActivateAsk) moonTap = () => resolvePendingAsk(true);
   }
-  row.appendChild(slotEl("月亮", moonContent, "moon", moonBack, moonTap));
+  row.appendChild(slotEl("月亮", moonContent, "moon", moonBack, moonTap, !isOpp ? "moon" : null));
 
   col.appendChild(row);
 
@@ -546,9 +666,10 @@ function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
   return col;
 }
 
-function slotEl(header, content, kind, back, onTap) {
+function slotEl(header, content, kind, back, onTap, dropKind) {
   const wrap = document.createElement("div");
   wrap.className = "slot-wrap";
+  if (dropKind) wrap.dataset.dropKind = dropKind;
   const h = document.createElement("div");
   h.className = "slot-header";
   h.textContent = header;
@@ -570,16 +691,13 @@ function slotEl(header, content, kind, back, onTap) {
     img.src = cardImgSrc(content);
     img.alt = content;
     img.draggable = false;
-    attachCardInfo(img, content);
-    if (onTap) {
-      img.setAttribute("role", "button");
-      img.setAttribute("tabindex", "0");
-      img.setAttribute("aria-label", `發動 ${content}`);
-      img.addEventListener("click", onTap);
-      img.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onTap(); }
-      });
-    }
+    attachInteractiveCard(img, {
+      cardName: content,
+      onConfirm: onTap || null,
+      draggable: false,
+      ariaLabel: onTap ? `發動 ${content}` : null,
+      wrapEl: wrap,
+    });
     wrap.appendChild(img);
     return wrap;
   }
