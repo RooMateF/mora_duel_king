@@ -179,6 +179,7 @@ async function publishState(guestUid) {
   const pub = {
     round: game.roundNum,
     starsRevealed: game.starsRevealed,
+    firstIsP1: game.firstIsP1,
     p1: boardSnapshotFor(game.p1, game.starsRevealed),
     p2: boardSnapshotFor(game.p2, game.starsRevealed),
     log: gameLog,
@@ -207,6 +208,7 @@ async function runGameLoop(guestUid) {
       const pub = {
         round: game.roundNum,
         starsRevealed: true,
+        firstIsP1: game.firstIsP1,
         p1: boardSnapshotFor(game.p1, true),
         p2: boardSnapshotFor(game.p2, true),
         log: gameLog,
@@ -267,6 +269,7 @@ function renderLocalState(winnerRole) {
   const pub = {
     round: game.roundNum,
     starsRevealed: game.starsRevealed,
+    firstIsP1: game.firstIsP1,
     p1: boardSnapshotFor(game.p1, game.starsRevealed || !!winnerRole),
     p2: boardSnapshotFor(game.p2, game.starsRevealed || !!winnerRole),
     log: gameLog,
@@ -308,8 +311,25 @@ function renderPublic(pub) {
   renderBand($("myBand"), pub[mineKey], false, lastPrivateSeen);
   renderBattlefield(pub, oppKey, mineKey);
   renderLog(pub.log || []);
+  if (!prevPub && pub.round === 1) showCoinFlip(pub);
   triggerBattleEffects(prevPub, pub, oppKey, mineKey);
   if (pub.winnerRole) showGameOver(pub.winnerRole, pub);
+}
+
+// -- 開場硬幣:決定先攻/後攻 -----------------------------------------
+
+function showCoinFlip(pub) {
+  if (typeof pub.firstIsP1 !== "boolean") return;
+  const firstName = pub.firstIsP1 ? pub.p1.name : pub.p2.name;
+  const overlay = $("coinFlipOverlay");
+  $("coinFrontFace").textContent = pub.p1.name;
+  $("coinBackFace").textContent = pub.p2.name;
+  const coin = $("coinEl");
+  coin.className = "coin " + (pub.firstIsP1 ? "spin-front" : "spin-back");
+  $("coinResultText").textContent = "";
+  overlay.classList.remove("hidden");
+  setTimeout(() => { $("coinResultText").textContent = `${firstName} 先攻!`; }, 1150);
+  setTimeout(() => { overlay.classList.add("hidden"); }, 1850);
 }
 
 // -- 戰鬥畫面特效:翻牌、太陽強化、月亮發動、勝負對撞 -----------------
@@ -320,13 +340,14 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// 每行 log 之後都停一下讓畫面有時間播動畫,關鍵劇情點(翻牌、出招、發動、分出勝負)停久一點
+// 每行 log 之後都停一下讓畫面有時間播動畫,關鍵劇情點(開場硬幣、翻牌、出招、發動、分出勝負)停久一點
 function delayForLogLine(text) {
+  if (/^\n===== 第 1 回合 =====/.test(text)) return 1900; // 等開場硬幣動畫播完
   let extra = 0;
   if (/^★ .+ 贏得本回合!$/.test(text) || /^平手!/.test(text)) extra = 550;
   else if (/揭示星星:/.test(text)) extra = 200;
-  else if (/打出太陽卡:/.test(text) || /打出【烈陽】!$/.test(text)) extra = 150;
-  else if (/發動【.+】/.test(text)) extra = 150;
+  else if (/打出太陽卡:/.test(text) || /打出【烈陽】!$/.test(text)) extra = 500; // 對手出牌會有飛入動畫,留多一點時間播完
+  else if (/發動【.+】/.test(text)) extra = 500;
   return 150 + extra;
 }
 
@@ -362,17 +383,27 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
   }
 
   // 2) 太陽卡出牌/強化(牌一出現在太陽欄位就播,型別不符後續會自己收回手牌)
-  [[oppKey, oppCol], [mineKey, mineCol]].forEach(([key, col]) => {
-    const prevLen = ((prevPub[key] || {}).playedSun || []).length;
-    const nowLen = ((pub[key] || {}).playedSun || []).length;
-    if (prevLen === 0 && nowLen > 0) fx(sunImg(col), "fx-sun");
+  // 對手看不到手牌內容,額外從對手的太陽手牌堆疊「飛」一張進場,讓對手的動作更有實感
+  [[oppKey, oppCol, true], [mineKey, mineCol, false]].forEach(([key, col, isOpp]) => {
+    const prevArr = (prevPub[key] || {}).playedSun || [];
+    const nowArr = (pub[key] || {}).playedSun || [];
+    if (prevArr.length === 0 && nowArr.length > 0) {
+      const card = nowArr[nowArr.length - 1];
+      const target = sunImg(col);
+      if (isOpp) flyCardIn(oppHandPileImg("太陽手牌"), target, card, () => fx(target, "fx-sun"));
+      else fx(target, "fx-sun");
+    }
   });
 
   // 3) 月亮卡發動特效
-  [[oppKey, oppCol], [mineKey, mineCol]].forEach(([key, col]) => {
+  [[oppKey, oppCol, true], [mineKey, mineCol, false]].forEach(([key, col, isOpp]) => {
     const prevMoon = (prevPub[key] || {}).playedMoon;
     const nowMoon = (pub[key] || {}).playedMoon;
-    if (!prevMoon && nowMoon) fx(moonImg(col), "fx-moon");
+    if (!prevMoon && nowMoon) {
+      const target = moonImg(col);
+      if (isOpp) flyCardIn(oppHandPileImg("月亮手牌"), target, nowMoon, () => fx(target, "fx-moon"));
+      else fx(target, "fx-moon");
+    }
   });
 
   // 4) 回合勝負對撞:掃描這次新增的 log 行,找「★ XXX 贏得本回合!」或「平手!」
@@ -391,6 +422,44 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
       fx(starImg(mineCol), "fx-tie");
     }
   }
+}
+
+// 對手看不到手牌,借對手「太陽手牌/月亮手牌」那疊牌背的位置當作飛出的起點
+function oppHandPileImg(label) {
+  const oppBand = $("oppBand");
+  if (!oppBand) return null;
+  const tiles = oppBand.querySelectorAll(".pile-tile-wrap");
+  for (const t of tiles) {
+    const cap = t.querySelector(".pile-tile-label");
+    if (cap && cap.textContent === label) return t.querySelector(".pile-back");
+  }
+  return null;
+}
+
+// 讓一張卡從 fromEl 的位置飛到 toEl 的位置再消失,onArrive 在飛抵時觸發(通常接著播欄位本身的特效)
+function flyCardIn(fromEl, toEl, cardName, onArrive) {
+  if (!fromEl || !toEl) { if (onArrive) onArrive(); return; }
+  const fromRect = fromEl.getBoundingClientRect();
+  const toRect = toEl.getBoundingClientRect();
+  const ghost = document.createElement("img");
+  ghost.src = cardImgSrc(cardName);
+  ghost.alt = cardName;
+  ghost.className = "fly-card-ghost";
+  ghost.style.width = `${toRect.width}px`;
+  ghost.style.left = "0px";
+  ghost.style.top = "0px";
+  ghost.style.transform = `translate(${fromRect.left}px, ${fromRect.top}px) scale(0.6)`;
+  ghost.style.opacity = "0.4";
+  document.body.appendChild(ghost);
+  requestAnimationFrame(() => {
+    ghost.style.transition = "transform 0.42s cubic-bezier(.2,.8,.3,1), opacity 0.42s ease-out";
+    ghost.style.transform = `translate(${toRect.left}px, ${toRect.top}px) scale(1)`;
+    ghost.style.opacity = "1";
+  });
+  setTimeout(() => {
+    ghost.remove();
+    if (onArrive) onArrive();
+  }, 440);
 }
 
 function renderBand(container, snapshot, isOpp, privateData) {

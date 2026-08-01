@@ -365,6 +365,72 @@ button:hover { filter: brightness(1.1); }
   50% { transform: scale(1.1); box-shadow: 0 0 16px 4px rgba(160,168,178,0.75); }
 }
 .slot-card-img.fx-tie { animation: battleTie 0.6s ease-in-out; }
+
+/* 對手出牌:借對手手牌堆疊的位置飛一張卡進戰場,讓對手的動作也有實際的畫面 */
+.fly-card-ghost {
+  position: fixed;
+  z-index: 998;
+  pointer-events: none;
+  aspect-ratio: 400 / 560;
+  height: auto;
+  border-radius: 6px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+}
+
+/* 開場硬幣:決定先攻/後攻 */
+.coin-flip-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+.coin-stage {
+  perspective: 700px;
+  width: 120px;
+  height: 120px;
+}
+.coin {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+}
+.coin-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backface-visibility: hidden;
+  font-weight: bold;
+  font-size: 15px;
+  text-align: center;
+  padding: 8px;
+  color: #2a2200;
+  background: radial-gradient(circle at 35% 30%, #ffe9a8, #ffd35c 55%, #d9a72e 100%);
+  border: 3px solid #a97e1d;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+}
+.coin-back { transform: rotateY(180deg); }
+@keyframes coinSpinFront {
+  0% { transform: rotateY(0deg) translateY(0); }
+  50% { transform: rotateY(900deg) translateY(-46px); }
+  100% { transform: rotateY(1080deg) translateY(0); }
+}
+@keyframes coinSpinBack {
+  0% { transform: rotateY(0deg) translateY(0); }
+  50% { transform: rotateY(900deg) translateY(-46px); }
+  100% { transform: rotateY(1260deg) translateY(0); }
+}
+.coin.spin-front { animation: coinSpinFront 1.3s cubic-bezier(.25,.8,.3,1) forwards; }
+.coin.spin-back { animation: coinSpinBack 1.3s cubic-bezier(.25,.8,.3,1) forwards; }
+.coin-result {
+  font-size: 20px;
+  font-weight: bold;
+  color: #ffd35c;
+  min-height: 28px;
+}
 .slot-empty-card {
   height: 8.2dvh;
   aspect-ratio: 400 / 560;
