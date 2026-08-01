@@ -380,9 +380,10 @@ class Game {
   // -- 星星揭示 ---------------------------------------------------
 
   async starReveal(pFirst, pSecond) {
+    // 這個 flag 要在任何一句 log 觸發重畫之前就設好,不然畫面會在整個揭示階段都還顯示蓋牌
+    this.starsRevealed = true;
     await this.ui.log(`${pFirst.name} 揭示星星:${pFirst.committedStar || "(無星星可出)"}`);
     await this.ui.log(`${pSecond.name} 揭示星星:${pSecond.committedStar || "(無星星可出)"}`);
-    this.starsRevealed = true;
   }
 
   // -- 月亮蓋牌(星星之後、太陽之前,雙方同時決定) ------------------

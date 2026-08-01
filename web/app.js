@@ -11,6 +11,11 @@ let lastPublicSeen = null;
 let lastPrivateSeen = null;
 let pendingAsk = null; // { title, prompt, options, kind, resolve } — 待處理的「打牌」決策
 
+// 各模式啟動時會覆寫這個函式,讓它去抓「當下最新的」狀態來重畫,而不是重播 lastPublicSeen 這個舊快照。
+// 這點很重要:引擎剛把某個狀態(例如 starsRevealed)寫回去、還沒來得及讓 log()/publishState 補一次
+// render 之前,如果馬上要跳出下一個提示(showCardPickUI),不能只是重播上一次看到的舊畫面。
+let refreshBoard = () => { if (lastPublicSeen) renderPublic(lastPublicSeen); };
+
 function $(id) { return document.getElementById(id); }
 
 function showScreen(id) {
@@ -108,6 +113,15 @@ function startHostGame(hostName, guestName, guestUid) {
   showScreen("gameScreen");
   const ui = makeUi(guestUid);
   game = new Game(ui, hostName, guestName);
+  // 房主自己畫面用的即時重畫:直接從 game 現況組快照,不用等 Firebase 一來一回,
+  // 避免剛寫回的狀態(例如 starsRevealed)還沒進 lastPublicSeen 就要跳出下一個提示。
+  refreshBoard = () => {
+    lastPrivateSeen = {
+      handSun: game.p1.handSun, handMoon: game.p1.handMoon, committedStar: game.p1.committedStar,
+      pendingMoonCard: game.p1.pendingMoonCard,
+    };
+    renderPublic(buildHostPub());
+  };
 
   Net.watchPublic(roomCode, (pub) => {
     if (pub) renderPublic(pub);
@@ -177,8 +191,8 @@ function boardSnapshotFor(p, revealStar) {
   };
 }
 
-async function publishState(guestUid) {
-  const pub = {
+function buildHostPub() {
+  return {
     round: game.roundNum,
     starsRevealed: game.starsRevealed,
     firstIsP1: game.firstIsP1,
@@ -188,6 +202,10 @@ async function publishState(guestUid) {
     winnerRole: null,
     updatedAt: Date.now(),
   };
+}
+
+async function publishState(guestUid) {
+  const pub = buildHostPub();
   await Net.publishPublic(roomCode, pub);
   await Net.publishPrivate(roomCode, myUid, {
     handSun: game.p1.handSun, handMoon: game.p1.handMoon, committedStar: game.p1.committedStar,
@@ -238,6 +256,7 @@ function startSinglePlayer(difficulty) {
 
   const ui = makeLocalUi();
   game = new Game(ui, "你", "電腦", { vsAi: true, difficulty });
+  refreshBoard = renderLocalState;
   renderLocalState();
   runLocalGameLoop();
 }
@@ -866,7 +885,7 @@ function showCardPickUI(title, prompt, options, kind) {
   return new Promise((resolve) => {
     resetArmed();
     pendingAsk = { title, prompt, options, kind, resolve };
-    if (lastPublicSeen) renderPublic(lastPublicSeen);
+    refreshBoard();
   });
 }
 

@@ -110,9 +110,11 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="rules.js"></script>
-<script src="engine.js"></script>
-<script src="net.js"></script>
-<script src="app.js"></script>
+<!-- ?v= 是手動版本號,每次改動 rules.js/engine.js/net.js/app.js 就要遞增,
+     避免玩家瀏覽器快取到部署前的舊版程式碼、看不到最新的修正 -->
+<script src="rules.js?v=9"></script>
+<script src="engine.js?v=9"></script>
+<script src="net.js?v=9"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>
