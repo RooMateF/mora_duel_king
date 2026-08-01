@@ -144,6 +144,7 @@ function makeUi(guestUid) {
     gameLog.push(text);
     if (gameLog.length > 300) gameLog = gameLog.slice(-300);
     await publishState(guestUid);
+    await sleep(delayForLogLine(text));
   }
   async function confirm(role, title, prompt) {
     const v = await ask(role, title, prompt, [
@@ -247,6 +248,7 @@ function makeLocalUi() {
     gameLog.push(text);
     if (gameLog.length > 300) gameLog = gameLog.slice(-300);
     renderLocalState();
+    await sleep(delayForLogLine(text));
   }
   async function confirm(role, title, prompt) {
     const v = await ask(role, title, prompt, [
@@ -297,6 +299,7 @@ async function runLocalGameLoop() {
 // -- 畫面渲染 ---------------------------------------------------
 
 function renderPublic(pub) {
+  const prevPub = lastPublicSeen;
   lastPublicSeen = pub;
   const mineKey = myRole === "p1" ? "p1" : "p2";
   const oppKey = myRole === "p1" ? "p2" : "p1";
@@ -305,7 +308,89 @@ function renderPublic(pub) {
   renderBand($("myBand"), pub[mineKey], false, lastPrivateSeen);
   renderBattlefield(pub, oppKey, mineKey);
   renderLog(pub.log || []);
+  triggerBattleEffects(prevPub, pub, oppKey, mineKey);
   if (pub.winnerRole) showGameOver(pub.winnerRole, pub);
+}
+
+// -- 戰鬥畫面特效:翻牌、太陽強化、月亮發動、勝負對撞 -----------------
+// 純粹靠比對「上一次 render 的 snapshot」跟「這次的 snapshot」觸發,不需要引擎額外通知,
+// 這樣本機/房主/加入者三種模式都能用同一套邏輯(加入者從來不會直接執行 engine.js)。
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// 每行 log 之後都停一下讓畫面有時間播動畫,關鍵劇情點(翻牌、出招、發動、分出勝負)停久一點
+function delayForLogLine(text) {
+  let extra = 0;
+  if (/^★ .+ 贏得本回合!$/.test(text) || /^平手!/.test(text)) extra = 550;
+  else if (/揭示星星:/.test(text)) extra = 200;
+  else if (/打出太陽卡:/.test(text) || /打出【烈陽】!$/.test(text)) extra = 150;
+  else if (/發動【.+】/.test(text)) extra = 150;
+  return 150 + extra;
+}
+
+let scannedLogLines = 0; // pub.log 其實是共用同一個可變陣列的參照,不能靠比較 prevPub.log/pub.log 本身抓差異,要自己記掃到哪
+
+function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
+  const allLines = pub.log || [];
+  if (allLines.length < scannedLogLines) scannedLogLines = 0; // 開新的一局,log 陣列變短了,計數器歸零
+  const newLines = allLines.slice(scannedLogLines);
+  scannedLogLines = allLines.length;
+
+  if (!prevPub) return;
+  const bf = $("battlefield");
+  const cols = bf.querySelectorAll(":scope > .bf-col");
+  const oppCol = cols[0], mineCol = cols[1];
+  if (!oppCol || !mineCol) return;
+
+  const starImg = (col) => col.querySelector('[data-slot-kind="star"] .slot-card-img');
+  const sunImg = (col) => col.querySelector('[data-slot-kind="sun"] .slot-card-img');
+  const moonImg = (col) => col.querySelector('[data-slot-kind="moon"] .slot-card-img');
+
+  function fx(el, cls) {
+    if (!el) return;
+    el.classList.remove(cls);
+    void el.offsetWidth; // 強制 reflow,確保動畫在 class 重新加上時真的會重播
+    el.classList.add(cls);
+  }
+
+  // 1) 雙方星星同時翻牌
+  if (!prevPub.starsRevealed && pub.starsRevealed) {
+    fx(starImg(oppCol), "fx-flip");
+    fx(starImg(mineCol), "fx-flip");
+  }
+
+  // 2) 太陽卡出牌/強化(牌一出現在太陽欄位就播,型別不符後續會自己收回手牌)
+  [[oppKey, oppCol], [mineKey, mineCol]].forEach(([key, col]) => {
+    const prevLen = ((prevPub[key] || {}).playedSun || []).length;
+    const nowLen = ((pub[key] || {}).playedSun || []).length;
+    if (prevLen === 0 && nowLen > 0) fx(sunImg(col), "fx-sun");
+  });
+
+  // 3) 月亮卡發動特效
+  [[oppKey, oppCol], [mineKey, mineCol]].forEach(([key, col]) => {
+    const prevMoon = (prevPub[key] || {}).playedMoon;
+    const nowMoon = (pub[key] || {}).playedMoon;
+    if (!prevMoon && nowMoon) fx(moonImg(col), "fx-moon");
+  });
+
+  // 4) 回合勝負對撞:掃描這次新增的 log 行,找「★ XXX 贏得本回合!」或「平手!」
+  for (const line of newLines) {
+    const winMatch = line.match(/^★ (.+) 贏得本回合!$/);
+    if (winMatch) {
+      const winnerName = winMatch[1];
+      const winnerIsOpp = pub[oppKey] && pub[oppKey].name === winnerName;
+      const winCol = winnerIsOpp ? oppCol : mineCol;
+      const loseCol = winnerIsOpp ? mineCol : oppCol;
+      const winImg = starImg(winCol), loseImg = starImg(loseCol);
+      if (winImg) { winImg.style.setProperty("--bump-dir", winnerIsOpp ? "10px" : "-10px"); fx(winImg, "fx-win"); }
+      if (loseImg) { loseImg.style.setProperty("--bump-dir", winnerIsOpp ? "-10px" : "10px"); fx(loseImg, "fx-lose"); }
+    } else if (/^平手!/.test(line)) {
+      fx(starImg(oppCol), "fx-tie");
+      fx(starImg(mineCol), "fx-tie");
+    }
+  }
 }
 
 function renderBand(container, snapshot, isOpp, privateData) {
@@ -712,6 +797,7 @@ function slotEl(header, content, kind, back, onTap, dropKind, value) {
   const wrap = document.createElement("div");
   const isArmed = onTap && armedValue !== null && value !== undefined && armedValue === value;
   wrap.className = "slot-wrap" + (isArmed ? " armed" : "");
+  wrap.dataset.slotKind = kind;
   if (dropKind) wrap.dataset.dropKind = dropKind;
   const h = document.createElement("div");
   h.className = "slot-header";
