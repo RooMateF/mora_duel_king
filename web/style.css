@@ -411,6 +411,17 @@ button:hover { filter: brightness(1.1); }
 }
 .pile-back.swipe-ready { box-shadow: 0 0 0 3px #ffd35c, 0 4px 10px rgba(0,0,0,0.5); }
 
+/* 抽牌儀式:牌從牌堆放大移到畫面正中央停留一下,再縮小飛進手牌區,模擬現實世界抽牌的動作 */
+.draw-ceremony-ghost {
+  position: fixed;
+  z-index: 996;
+  pointer-events: none;
+  aspect-ratio: 400 / 560;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 14px 32px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.12);
+}
+
 /* 星星被吸收時,贏家那格接到卡的瞬間亮一下 */
 @keyframes absorbReceive {
   0% { transform: scale(1); }

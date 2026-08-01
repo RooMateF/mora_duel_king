@@ -3,9 +3,11 @@
 // 單人模式:new Game(ui, "你", "電腦", {vsAi:true, difficulty}) 時,p2 全部由內建 AI 決策,完全不會呼叫 ui。
 // this.ui 需提供以下介面(見 net.js / app.js 的 makeUi()):
 //   ui.log(text)
-//   ui.ask(role, title, prompt, options, kind) -> Promise<value>   options: [{label, value}]
+//   ui.ask(role, title, prompt, options, kind, onResolved) -> Promise<value>   options: [{label, value}]
 //     kind 是可選的提示,標記這個詢問對應到「打出哪張牌」,讓 UI 可以直接點卡片而不是跳文字選單:
-//     "star" | "sun" | "moonCommit" | "moonActivate" | undefined(一般文字選項)
+//     "star" | "sun" | "moonCommit" | "moonActivate" | "drawPile" | undefined(一般文字選項)
+//     onResolved(value) 是可選的同步 callback,在 UI 內部重新畫面之前執行——用來讓引擎把這次選擇的結果
+//     先寫回 player 物件,避免「畫面先渲染、引擎才把狀態寫回去」的順序問題導致畫面顯示舊狀態。
 //   ui.confirm(role, title, prompt) -> Promise<boolean>
 //   ui.info(role, title, msg) -> Promise<void>
 
@@ -119,7 +121,7 @@ class Game {
         pile = Math.random() < 0.5 ? "太陽" : "月亮";
       } else {
         pile = await this.ui.ask(player.role, "平手抽牌(強制)",
-          `${player.name},平手時牌庫仍有牌,必須抽一張,選擇要抽哪一堆:`,
+          "平手,選擇要抽的牌堆",
           [
             { label: `太陽牌庫(剩${player.sunPile.length})`, value: "太陽" },
             { label: `月亮牌庫(剩${player.moonPile.length})`, value: "月亮" },
@@ -165,7 +167,7 @@ class Game {
         pile = Math.random() < 0.5 ? "太陽" : "月亮";
       } else {
         pile = await this.ui.ask(player.role, "選擇要抽的牌堆",
-          `${player.name},選擇要抽太陽還是月亮牌庫:`,
+          "選擇要抽的牌堆",
           [
             { label: `太陽牌庫(剩${player.sunPile.length})`, value: "太陽" },
             { label: `月亮牌庫(剩${player.moonPile.length})`, value: "月亮" },
@@ -187,7 +189,7 @@ class Game {
       target = this.aiDecideEclipseBonusTarget(defender, attacker);
     } else {
       const targetRole = await this.ui.ask(defender.role, "日蝕反制獎勵",
-        "成功反制烈陽!選擇由誰抽兩張牌(太陽、月亮牌庫自由選):",
+        "反制成功!選擇由誰抽兩張牌",
         [
           { label: `自己(${defender.name})`, value: defender.role },
           { label: `對手(${attacker.name})`, value: attacker.role },
@@ -215,8 +217,9 @@ class Game {
     if (!available.length) return null;
     if (this.isAiControlled(player)) return this.aiChooseStar(player, available);
     const choice = await this.ui.ask(player.role, "出星星卡(蓋牌)",
-      "選擇這回合要出的星星卡(雙方同時決定,對方看不到):",
-      available.map((t) => ({ label: `${t}(剩${player.stars[t]}張)`, value: t })), "star");
+      "選擇這回合的星星牌(對方看不到)",
+      available.map((t) => ({ label: `${t}(剩${player.stars[t]}張)`, value: t })), "star",
+      (v) => { player.committedStar = v || available[0]; });
     return choice || available[0];
   }
 
@@ -258,7 +261,7 @@ class Game {
     if (this.isAiControlled(actor)) return this.aiDecideSun(actor);
     const opts = actor.handSun.map((c) => ({ label: `打出:${c}`, value: c }));
     opts.push({ label: "不出太陽", value: null });
-    return await this.ui.ask(actor.role, "太陽階段", `${actor.name},要打出太陽卡嗎?`, opts, "sun");
+    return await this.ui.ask(actor.role, "太陽階段", "是否打出太陽牌?", opts, "sun");
   }
 
   aiDecideSun(actor) {
@@ -371,8 +374,7 @@ class Game {
       return Math.random() < chance;
     }
     return await this.ui.confirm(defender.role, "日蝕反制",
-      `${attacker.name} 打出了【烈陽】!你蓋著一張日蝕,是否提前發動來反制,使其效果無效?` +
-      `\n(成功反制後,可再指定自己或對手抽兩張牌,太陽、月亮牌庫自由選;這張日蝕會直接用掉,月亮階段就不會再有它了)`);
+      `${attacker.name} 打出了【烈陽】!是否發動日蝕反制?`);
   }
 
   // -- 星星揭示 ---------------------------------------------------
@@ -391,8 +393,8 @@ class Game {
     const opts = player.handMoon.map((c) => ({ label: `蓋:${c}`, value: c }));
     opts.push({ label: "不蓋月亮卡", value: null });
     return await this.ui.ask(player.role, "蓋月亮卡(可不蓋)",
-      `${player.name},要不要蓋一張月亮卡備用?(蓋牌後,稍後可以選擇要不要真的發動;` +
-      `月亮卡要先蓋出去才能用,包含日蝕反制烈陽——沒蓋的話這回合完全不能發動)`, opts, "moonCommit");
+      "是否蓋下月亮牌?", opts, "moonCommit",
+      (v) => { player.pendingMoonCard = v; });
   }
 
   aiDecideMoonCommit(player) {
@@ -411,6 +413,21 @@ class Game {
 
   // -- 月亮發動(星星揭示之後,決定要不要發動蓋著的那張) --------------
 
+  // 把「發動與否」決定後要做的所有狀態異動都集中在這裡,並且一定要在畫面重畫之前執行完(見 ui.ask 的
+  // onResolved 說明),否則畫面會先用舊狀態畫一次,月亮卡看起來像沒蓋一樣。
+  applyMoonActivation(actor, other, card, activate) {
+    actor.moonDecided = true;
+    if (!activate) return;
+    actor.handMoon.splice(actor.handMoon.indexOf(card), 1);
+    actor.playedMoonCard = card;
+    actor.discard.push(card);
+    if (card === "日蝕") {
+      other.sunNegated = true;
+    } else if (actor.committedStar !== null) {
+      actor.moonStealActive = MOON_STEAL[card];
+    }
+  }
+
   async moonActivate(actor, other) {
     if (actor.moonDecided) {
       await this.ui.log(`${actor.name} 蓋著的月亮卡已經在太陽階段用掉了。`);
@@ -425,33 +442,30 @@ class Game {
     let activate;
     if (actor.forcedMoon) {
       activate = true;
+      this.applyMoonActivation(actor, other, card, true);
       await this.ui.log(`${actor.name} 被烈陽效果一鎖定,必須發動蓋著的【${card}】!`);
     } else if (this.isAiControlled(actor)) {
       activate = this.aiDecideMoonActivate(actor, other, card);
+      this.applyMoonActivation(actor, other, card, activate);
     } else {
       activate = await this.ui.ask(actor.role, "發動月亮卡?",
-        `${actor.name},要發動蓋著的【${card}】嗎?(不發動的話,這張牌直接收回手上)`,
+        `是否發動【${card}】?`,
         [{ label: `發動【${card}】`, value: true }, { label: "不發動", value: false }],
-        "moonActivate");
+        "moonActivate",
+        (v) => this.applyMoonActivation(actor, other, card, v));
     }
-    actor.moonDecided = true;
     if (!activate) {
       await this.ui.log(`${actor.name} 選擇不發動蓋著的月亮卡,收回手上。`);
       return;
     }
-    actor.handMoon.splice(actor.handMoon.indexOf(card), 1);
-    actor.playedMoonCard = card;
-    actor.discard.push(card);
     if (card === "日蝕") {
       await this.ui.log(`${actor.name} 發動【日蝕】(效果二):使 ${other.name} 的太陽卡效果無效。`);
-      other.sunNegated = true;
     } else {
       const targetType = MOON_STEAL[card];
       if (actor.committedStar === null) {
         await this.ui.log(`${actor.name} 發動【${card}】,但本回合沒出星星卡,偷變無效。`);
       } else {
         await this.ui.log(`${actor.name} 發動【${card}】,把自己這回合的星星改成:${targetType}`);
-        actor.moonStealActive = targetType;
       }
     }
   }

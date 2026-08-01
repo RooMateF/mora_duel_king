@@ -125,7 +125,7 @@ function startHostGame(hostName, guestName, guestUid) {
 }
 
 function makeUi(guestUid) {
-  async function ask(role, title, prompt, options, kind) {
+  async function ask(role, title, prompt, options, kind, onResolved) {
     let value;
     if (role === "p1") {
       value = await showLocalModal(title, prompt, options, kind);
@@ -137,6 +137,8 @@ function makeUi(guestUid) {
       });
       value = await Net.waitRpcResponse(roomCode, guestUid, id);
     }
+    // 引擎要先把這次選擇的結果寫回 player 物件,畫面才不會照舊狀態畫一次
+    if (onResolved) onResolved(value);
     await publishState(guestUid);
     return value;
   }
@@ -241,8 +243,10 @@ function startSinglePlayer(difficulty) {
 }
 
 function makeLocalUi() {
-  async function ask(_role, title, prompt, options, kind) {
+  async function ask(_role, title, prompt, options, kind, onResolved) {
     const value = await showLocalModal(title, prompt, options, kind);
+    // 引擎要先把這次選擇的結果寫回 player 物件,畫面才不會照舊狀態畫一次
+    if (onResolved) onResolved(value);
     renderLocalState();
     return value;
   }
@@ -349,7 +353,7 @@ function delayForLogLine(text) {
   else if (/揭示星星:/.test(text)) extra = 200;
   else if (/打出太陽卡:/.test(text) || /打出【烈陽】!$/.test(text)) extra = 500; // 對手出牌會有飛入動畫,留多一點時間播完
   else if (/發動【.+】/.test(text)) extra = 500;
-  else if (/(抽牌|抽了一張牌)。$/.test(text)) extra = 450; // 抽牌會有牌堆脈動+飛牌動畫
+  else if (/(抽牌|抽了一張牌)。$/.test(text)) extra = 1050; // 抽牌儀式(放大置中→飛進手牌)要多留時間播完
   return 150 + extra;
 }
 
@@ -371,6 +375,15 @@ function bandPileTileImg(bandEl, label) {
   return null;
 }
 
+// 保險用的「下一幀」:一般瀏覽器用 requestAnimationFrame 最順,但分頁不在前景/沒在合成畫面時
+// rAF 可能整個不會觸發,額外排一個 setTimeout 當備援,兩個哪個先到就跑,確保動畫一定會開始播放。
+function nextPaint(fn) {
+  let done = false;
+  const run = () => { if (done) return; done = true; fn(); };
+  requestAnimationFrame(run);
+  setTimeout(run, 50);
+}
+
 // 讓一張卡從 fromEl 的位置飛到 toEl 的位置再消失,onArrive 在飛抵時觸發(通常接著播欄位本身的特效)
 function flyGhost(fromEl, toEl, src, altText, onArrive) {
   if (!fromEl || !toEl) { if (onArrive) onArrive(); return; }
@@ -386,7 +399,7 @@ function flyGhost(fromEl, toEl, src, altText, onArrive) {
   ghost.style.transform = `translate(${fromRect.left}px, ${fromRect.top}px) scale(0.6)`;
   ghost.style.opacity = "0.4";
   document.body.appendChild(ghost);
-  requestAnimationFrame(() => {
+  nextPaint(() => {
     ghost.style.transition = "transform 0.42s cubic-bezier(.2,.8,.3,1), opacity 0.42s ease-out";
     ghost.style.transform = `translate(${toRect.left}px, ${toRect.top}px) scale(1)`;
     ghost.style.opacity = "1";
@@ -401,18 +414,64 @@ function flyCardIn(fromEl, toEl, cardName, onArrive) {
   flyGhost(fromEl, toEl, cardImgSrc(cardName), cardName, onArrive);
 }
 
-// 牌堆脈動一下再飛一張牌背到手牌區,表示「剛剛抽了一張牌」(自己、對手都適用)
+// 抽牌儀式:牌堆放大移到畫面正中央停留一下(像現實世界把牌從牌堆抽出來看一眼),
+// 再縮小飛進手牌區消失。destEl 可以是元素、也可以是回傳元素的函式(在飛到手牌前才重新查一次,
+// 避免動畫途中畫面重繪導致目的地位置抓到舊的/已被移除的節點)。回傳 Promise,動畫播完才 resolve。
+function flyDrawCeremony(fromEl, destEl, backSrc) {
+  return new Promise((resolve) => {
+    if (!fromEl) { resolve(); return; }
+    const startRect = fromEl.getBoundingClientRect();
+    const ghost = document.createElement("img");
+    ghost.src = backSrc;
+    ghost.className = "draw-ceremony-ghost";
+    ghost.style.width = `${startRect.width}px`;
+    ghost.style.left = "0px";
+    ghost.style.top = "0px";
+    ghost.style.transform = `translate(${startRect.left}px, ${startRect.top}px) scale(1)`;
+    document.body.appendChild(ghost);
+
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const bigWidth = Math.min(140, vw * 0.34);
+    const scaleUp = bigWidth / startRect.width;
+    const centerX = vw / 2 - bigWidth / 2;
+    const centerY = vh * 0.4 - (bigWidth * 1.4) / 2;
+
+    nextPaint(() => {
+      ghost.style.transition = "transform 0.38s cubic-bezier(.2,.8,.3,1)";
+      ghost.style.transform = `translate(${centerX}px, ${centerY}px) scale(${scaleUp})`;
+    });
+
+    setTimeout(() => {
+      const dest = typeof destEl === "function" ? destEl() : destEl;
+      const destRect = dest ? dest.getBoundingClientRect() : startRect;
+      // 目的地(尤其是自己的整排手牌區)可能比原本的牌堆寬很多,縮小的目標尺寸只抓「差不多原本那麼小」,
+      // 不要真的撐大去貼合整個容器的寬度
+      const targetWidth = Math.min(destRect.width || startRect.width, startRect.width * 1.4, bigWidth);
+      const scaleDown = targetWidth / startRect.width;
+      ghost.style.transition = "transform 0.38s ease-in, opacity 0.28s ease-in";
+      ghost.style.transform = `translate(${destRect.left}px, ${destRect.top}px) scale(${scaleDown})`;
+      ghost.style.opacity = "0.25";
+    }, 620);
+
+    setTimeout(() => {
+      ghost.remove();
+      resolve();
+    }, 1000);
+  });
+}
+
+// 牌堆脈動一下,接著播抽牌儀式(放大置中→飛進手牌區),表示「剛剛抽了一張牌」(自己、對手都適用)
 function animateDraw(bandEl, isOpp, pileLabel, handLabel, backKind) {
   const pileImg = bandPileTileImg(bandEl, pileLabel);
   fx(pileImg, "fx-draw-pulse");
-  const dest = isOpp ? bandPileTileImg(bandEl, handLabel) : (bandEl && bandEl.querySelector(".hand"));
-  flyGhost(pileImg, dest, cardImgSrc(backKind), backKind);
+  const destGetter = () => (isOpp ? bandPileTileImg(bandEl, handLabel) : (bandEl && bandEl.querySelector(".hand")));
+  flyDrawCeremony(pileImg, destGetter, cardImgSrc(backKind));
 }
 
 // 玩家自己選要抽太陽/月亮牌堆時,可以直接向下滑動那疊牌來抽,像現實世界抽牌一樣把一張牌拉走;
 // 沒有滑動、只是單純點一下的話則走跟其他卡片一樣的「點一下標記、按確認鈕」流程。
 function attachSwipeDraw(el, opts) {
-  const { onArm, onConfirm, cardBackSrc, ariaLabel } = opts;
+  const { onArm, onConfirm, cardBackSrc, ariaLabel, destEl } = opts;
   el.setAttribute("role", "button");
   el.setAttribute("tabindex", "0");
   if (ariaLabel) el.setAttribute("aria-label", ariaLabel);
@@ -467,11 +526,10 @@ function attachSwipeDraw(el, opts) {
       const g = ghost;
       ghost = null;
       if (pulled && !canceled) {
-        g.style.transition = "transform 0.22s ease-in, opacity 0.22s ease-in";
-        g.style.transform = "translateY(220px)";
+        g.style.transition = "opacity 0.15s ease-out";
         g.style.opacity = "0";
-        setTimeout(() => g.remove(), 230);
-        onConfirm();
+        setTimeout(() => g.remove(), 160);
+        flyDrawCeremony(el, destEl, cardBackSrc).then(() => onConfirm());
       } else {
         g.style.transition = "transform 0.18s ease-out, opacity 0.18s ease-out";
         g.style.transform = "translateY(0px)";
@@ -516,7 +574,7 @@ function flyAbsorb(fromEl, toEl, cardName, onArrive) {
   ghost.style.top = "0px";
   ghost.style.transform = `translate(${fromRect.left}px, ${fromRect.top}px) scale(1)`;
   document.body.appendChild(ghost);
-  requestAnimationFrame(() => {
+  nextPaint(() => {
     ghost.style.transition = "transform 0.55s ease-in, opacity 0.55s ease-in";
     const toX = toRect.left + toRect.width / 2 - fromRect.width * 0.1;
     const toY = toRect.top + toRect.height / 2 - fromRect.width * 0.14;
@@ -713,6 +771,7 @@ function pileCardTile(label, count, backName, drawValue) {
       onConfirm: () => resolvePendingAsk(drawValue),
       cardBackSrc: cardImgSrc(backName),
       ariaLabel: `向下滑動抽${label}`,
+      destEl: () => { const myBand = $("myBand"); return myBand ? myBand.querySelector(".hand") : null; },
     });
   }
   wrap.appendChild(img);
