@@ -123,7 +123,7 @@ class Game {
           [
             { label: `太陽牌庫(剩${player.sunPile.length})`, value: "太陽" },
             { label: `月亮牌庫(剩${player.moonPile.length})`, value: "月亮" },
-          ]);
+          ], "drawPile");
         if (!pile) pile = "太陽";
       }
     } else {
@@ -169,7 +169,7 @@ class Game {
           [
             { label: `太陽牌庫(剩${player.sunPile.length})`, value: "太陽" },
             { label: `月亮牌庫(剩${player.moonPile.length})`, value: "月亮" },
-          ]);
+          ], "drawPile");
         if (!pile) pile = "太陽";
       }
     } else {
