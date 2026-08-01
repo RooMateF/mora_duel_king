@@ -340,7 +340,7 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// 每行 log 之後都停一下讓畫面有時間播動畫,關鍵劇情點(開場硬幣、翻牌、出招、發動、分出勝負)停久一點
+// 每行 log 之後都停一下讓畫面有時間播動畫,關鍵劇情點(開場硬幣、翻牌、出招、發動、抽牌、分出勝負)停久一點
 function delayForLogLine(text) {
   if (/^\n===== 第 1 回合 =====/.test(text)) return 1900; // 等開場硬幣動畫播完
   let extra = 0;
@@ -348,7 +348,64 @@ function delayForLogLine(text) {
   else if (/揭示星星:/.test(text)) extra = 200;
   else if (/打出太陽卡:/.test(text) || /打出【烈陽】!$/.test(text)) extra = 500; // 對手出牌會有飛入動畫,留多一點時間播完
   else if (/發動【.+】/.test(text)) extra = 500;
+  else if (/(抽牌|抽了一張牌)。$/.test(text)) extra = 450; // 抽牌會有牌堆脈動+飛牌動畫
   return 150 + extra;
+}
+
+function fx(el, cls) {
+  if (!el) return;
+  el.classList.remove(cls);
+  void el.offsetWidth; // 強制 reflow,確保動畫在 class 重新加上時真的會重播
+  el.classList.add(cls);
+}
+
+// 從 bandEl(oppBand/myBand)裡找出標籤符合的牌庫/手牌堆疊縮圖(太陽庫、月亮庫、太陽手牌、月亮手牌)
+function bandPileTileImg(bandEl, label) {
+  if (!bandEl) return null;
+  const tiles = bandEl.querySelectorAll(".pile-tile-wrap");
+  for (const t of tiles) {
+    const cap = t.querySelector(".pile-tile-label");
+    if (cap && cap.textContent === label) return t.querySelector(".pile-back");
+  }
+  return null;
+}
+
+// 讓一張卡從 fromEl 的位置飛到 toEl 的位置再消失,onArrive 在飛抵時觸發(通常接著播欄位本身的特效)
+function flyGhost(fromEl, toEl, src, altText, onArrive) {
+  if (!fromEl || !toEl) { if (onArrive) onArrive(); return; }
+  const fromRect = fromEl.getBoundingClientRect();
+  const toRect = toEl.getBoundingClientRect();
+  const ghost = document.createElement("img");
+  ghost.src = src;
+  ghost.alt = altText || "";
+  ghost.className = "fly-card-ghost";
+  ghost.style.width = `${toRect.width}px`;
+  ghost.style.left = "0px";
+  ghost.style.top = "0px";
+  ghost.style.transform = `translate(${fromRect.left}px, ${fromRect.top}px) scale(0.6)`;
+  ghost.style.opacity = "0.4";
+  document.body.appendChild(ghost);
+  requestAnimationFrame(() => {
+    ghost.style.transition = "transform 0.42s cubic-bezier(.2,.8,.3,1), opacity 0.42s ease-out";
+    ghost.style.transform = `translate(${toRect.left}px, ${toRect.top}px) scale(1)`;
+    ghost.style.opacity = "1";
+  });
+  setTimeout(() => {
+    ghost.remove();
+    if (onArrive) onArrive();
+  }, 440);
+}
+
+function flyCardIn(fromEl, toEl, cardName, onArrive) {
+  flyGhost(fromEl, toEl, cardImgSrc(cardName), cardName, onArrive);
+}
+
+// 牌堆脈動一下再飛一張牌背到手牌區,表示「剛剛抽了一張牌」(自己、對手都適用)
+function animateDraw(bandEl, isOpp, pileLabel, handLabel, backKind) {
+  const pileImg = bandPileTileImg(bandEl, pileLabel);
+  fx(pileImg, "fx-draw-pulse");
+  const dest = isOpp ? bandPileTileImg(bandEl, handLabel) : (bandEl && bandEl.querySelector(".hand"));
+  flyGhost(pileImg, dest, cardImgSrc(backKind), backKind);
 }
 
 let scannedLogLines = 0; // pub.log 其實是共用同一個可變陣列的參照,不能靠比較 prevPub.log/pub.log 本身抓差異,要自己記掃到哪
@@ -369,13 +426,6 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
   const sunImg = (col) => col.querySelector('[data-slot-kind="sun"] .slot-card-img');
   const moonImg = (col) => col.querySelector('[data-slot-kind="moon"] .slot-card-img');
 
-  function fx(el, cls) {
-    if (!el) return;
-    el.classList.remove(cls);
-    void el.offsetWidth; // 強制 reflow,確保動畫在 class 重新加上時真的會重播
-    el.classList.add(cls);
-  }
-
   // 1) 雙方星星同時翻牌
   if (!prevPub.starsRevealed && pub.starsRevealed) {
     fx(starImg(oppCol), "fx-flip");
@@ -390,7 +440,7 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
     if (prevArr.length === 0 && nowArr.length > 0) {
       const card = nowArr[nowArr.length - 1];
       const target = sunImg(col);
-      if (isOpp) flyCardIn(oppHandPileImg("太陽手牌"), target, card, () => fx(target, "fx-sun"));
+      if (isOpp) flyCardIn(bandPileTileImg($("oppBand"), "太陽手牌"), target, card, () => fx(target, "fx-sun"));
       else fx(target, "fx-sun");
     }
   });
@@ -401,12 +451,20 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
     const nowMoon = (pub[key] || {}).playedMoon;
     if (!prevMoon && nowMoon) {
       const target = moonImg(col);
-      if (isOpp) flyCardIn(oppHandPileImg("月亮手牌"), target, nowMoon, () => fx(target, "fx-moon"));
+      if (isOpp) flyCardIn(bandPileTileImg($("oppBand"), "月亮手牌"), target, nowMoon, () => fx(target, "fx-moon"));
       else fx(target, "fx-moon");
     }
   });
 
-  // 4) 回合勝負對撞:掃描這次新增的 log 行,找「★ XXX 贏得本回合!」或「平手!」
+  // 4) 抽牌動畫:牌庫變少代表有人剛抽了牌,自己、對手都適用
+  [[oppKey, $("oppBand"), true], [mineKey, $("myBand"), false]].forEach(([key, bandEl, isOpp]) => {
+    const prevSnap = prevPub[key] || {};
+    const nowSnap = pub[key] || {};
+    if ((prevSnap.sunPileCount || 0) > (nowSnap.sunPileCount || 0)) animateDraw(bandEl, isOpp, "太陽庫", "太陽手牌", "back_sun");
+    if ((prevSnap.moonPileCount || 0) > (nowSnap.moonPileCount || 0)) animateDraw(bandEl, isOpp, "月亮庫", "月亮手牌", "back_moon");
+  });
+
+  // 5) 回合勝負對撞:掃描這次新增的 log 行,找「★ XXX 贏得本回合!」或「平手!」
   for (const line of newLines) {
     const winMatch = line.match(/^★ (.+) 贏得本回合!$/);
     if (winMatch) {
@@ -424,44 +482,6 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
   }
 }
 
-// 對手看不到手牌,借對手「太陽手牌/月亮手牌」那疊牌背的位置當作飛出的起點
-function oppHandPileImg(label) {
-  const oppBand = $("oppBand");
-  if (!oppBand) return null;
-  const tiles = oppBand.querySelectorAll(".pile-tile-wrap");
-  for (const t of tiles) {
-    const cap = t.querySelector(".pile-tile-label");
-    if (cap && cap.textContent === label) return t.querySelector(".pile-back");
-  }
-  return null;
-}
-
-// 讓一張卡從 fromEl 的位置飛到 toEl 的位置再消失,onArrive 在飛抵時觸發(通常接著播欄位本身的特效)
-function flyCardIn(fromEl, toEl, cardName, onArrive) {
-  if (!fromEl || !toEl) { if (onArrive) onArrive(); return; }
-  const fromRect = fromEl.getBoundingClientRect();
-  const toRect = toEl.getBoundingClientRect();
-  const ghost = document.createElement("img");
-  ghost.src = cardImgSrc(cardName);
-  ghost.alt = cardName;
-  ghost.className = "fly-card-ghost";
-  ghost.style.width = `${toRect.width}px`;
-  ghost.style.left = "0px";
-  ghost.style.top = "0px";
-  ghost.style.transform = `translate(${fromRect.left}px, ${fromRect.top}px) scale(0.6)`;
-  ghost.style.opacity = "0.4";
-  document.body.appendChild(ghost);
-  requestAnimationFrame(() => {
-    ghost.style.transition = "transform 0.42s cubic-bezier(.2,.8,.3,1), opacity 0.42s ease-out";
-    ghost.style.transform = `translate(${toRect.left}px, ${toRect.top}px) scale(1)`;
-    ghost.style.opacity = "1";
-  });
-  setTimeout(() => {
-    ghost.remove();
-    if (onArrive) onArrive();
-  }, 440);
-}
-
 function renderBand(container, snapshot, isOpp, privateData) {
   container.innerHTML = "";
   if (!snapshot) return;
@@ -475,6 +495,22 @@ function renderBand(container, snapshot, isOpp, privateData) {
   if (askKind === "star" || askKind === "sun" || askKind === "moonCommit") {
     container.appendChild(actionPromptEl(pendingAsk.prompt));
     if (armedValue !== null) container.appendChild(confirmBarEl());
+  }
+
+  if (isOpp) {
+    // 對手看不到手牌內容,面板簡化成一列摘要就好,把省下的空間留給自己的面板放大
+    const summaryEl = document.createElement("div");
+    summaryEl.className = "opp-summary";
+    STAR_TYPES.forEach((t) => {
+      summaryEl.appendChild(handCardTile(t, "star", snapshot.stars[t], null, t));
+    });
+    summaryEl.appendChild(pileCardTile("太陽庫", snapshot.sunPileCount, "back_sun"));
+    summaryEl.appendChild(pileCardTile("月亮庫", snapshot.moonPileCount, "back_moon"));
+    summaryEl.appendChild(pileChip("棄牌", snapshot.discardCount, "discard"));
+    summaryEl.appendChild(pileCardTile("太陽手牌", snapshot.handSunCount, "back_sun"));
+    summaryEl.appendChild(pileCardTile("月亮手牌", snapshot.handMoonCount, "back_moon"));
+    container.appendChild(summaryEl);
+    return;
   }
 
   const starsRow = document.createElement("div");
@@ -494,31 +530,26 @@ function renderBand(container, snapshot, isOpp, privateData) {
 
   const handEl = document.createElement("div");
   handEl.className = "hand";
-  if (isOpp) {
-    handEl.appendChild(pileCardTile("太陽手牌", snapshot.handSunCount, "back_sun"));
-    handEl.appendChild(pileCardTile("月亮手牌", snapshot.handMoonCount, "back_moon"));
-  } else {
-    const priv = privateData || { handSun: [], handMoon: [] };
-    const sunPickable = askKind === "sun";
-    const moonPickable = askKind === "moonCommit";
-    (priv.handSun || []).forEach((c) => {
-      const selectable = sunPickable && pendingAsk.options.some((o) => o.value === c);
-      handEl.appendChild(handCardTile(c, "sun", null, selectable ? () => resolvePendingAsk(c) : null, c));
-    });
-    (priv.handMoon || []).forEach((c) => {
-      const selectable = moonPickable && pendingAsk.options.some((o) => o.value === c);
-      handEl.appendChild(handCardTile(c, "moon", null, selectable ? () => resolvePendingAsk(c) : null, c));
-    });
-    if (!(priv.handSun || []).length && !(priv.handMoon || []).length) {
-      const span = document.createElement("span");
-      span.className = "dim";
-      span.textContent = "(手上沒有太陽/月亮卡)";
-      handEl.appendChild(span);
-    }
-    if (sunPickable || moonPickable) {
-      const skipOpt = pendingAsk.options.find((o) => o.value === null || o.value === undefined);
-      if (skipOpt) handEl.appendChild(skipTile(skipOpt.label, () => resolvePendingAsk(null)));
-    }
+  const priv = privateData || { handSun: [], handMoon: [] };
+  const sunPickable = askKind === "sun";
+  const moonPickable = askKind === "moonCommit";
+  (priv.handSun || []).forEach((c) => {
+    const selectable = sunPickable && pendingAsk.options.some((o) => o.value === c);
+    handEl.appendChild(handCardTile(c, "sun", null, selectable ? () => resolvePendingAsk(c) : null, c));
+  });
+  (priv.handMoon || []).forEach((c) => {
+    const selectable = moonPickable && pendingAsk.options.some((o) => o.value === c);
+    handEl.appendChild(handCardTile(c, "moon", null, selectable ? () => resolvePendingAsk(c) : null, c));
+  });
+  if (!(priv.handSun || []).length && !(priv.handMoon || []).length) {
+    const span = document.createElement("span");
+    span.className = "dim";
+    span.textContent = "(手上沒有太陽/月亮卡)";
+    handEl.appendChild(span);
+  }
+  if (sunPickable || moonPickable) {
+    const skipOpt = pendingAsk.options.find((o) => o.value === null || o.value === undefined);
+    if (skipOpt) handEl.appendChild(skipTile(skipOpt.label, () => resolvePendingAsk(null)));
   }
   container.appendChild(handEl);
 }
