@@ -45,7 +45,10 @@
 
 <div id="gameScreen" class="screen hidden">
   <div id="topBar">
-    <button id="rulesBtn">規則說明</button>
+    <div class="topbar-btns">
+      <button id="rulesBtn">規則說明</button>
+      <button id="logToggleBtn">紀錄</button>
+    </div>
     <span id="statusText"></span>
     <span class="dim" style="font-size:12px;">長按卡片看效果;拖曳卡片到欄位出牌,或點卡片後按下方按鈕確認</span>
   </div>
@@ -54,7 +57,6 @@
     <div id="battlefield" class="band bf"></div>
     <div id="myBand" class="band"></div>
   </div>
-  <div id="logPanel"></div>
 </div>
 
 <div id="modalOverlay" class="overlay hidden">
@@ -69,6 +71,14 @@
   <div class="modal-box rules-box">
     <pre id="rulesText"></pre>
     <button id="rulesCloseBtn">關閉</button>
+  </div>
+</div>
+
+<div id="logOverlay" class="overlay hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="modal-box log-box">
+    <h3>對戰紀錄</h3>
+    <pre id="logText"></pre>
+    <button id="logCloseBtn">關閉</button>
   </div>
 </div>
 

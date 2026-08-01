@@ -32,6 +32,12 @@ async function init() {
   });
   $("rulesBtn").onclick = showRules;
   $("rulesCloseBtn").onclick = () => $("rulesOverlay").classList.add("hidden");
+  $("logToggleBtn").onclick = () => {
+    $("logOverlay").classList.remove("hidden");
+    const t = $("logText");
+    t.scrollTop = t.scrollHeight;
+  };
+  $("logCloseBtn").onclick = () => $("logOverlay").classList.add("hidden");
   $("copyCodeBtn").onclick = () => {
     navigator.clipboard.writeText(roomCode);
     $("copyCodeBtn").textContent = "已複製!";
@@ -747,10 +753,11 @@ function slotEl(header, content, kind, back, onTap, dropKind, value) {
 }
 
 function renderLog(lines) {
-  const panel = $("logPanel");
-  const wasAtBottom = panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 10;
+  const panel = $("logText");
+  const overlayOpen = !$("logOverlay").classList.contains("hidden");
+  const wasAtBottom = !overlayOpen || panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 10;
   panel.textContent = lines.join("\n");
-  if (wasAtBottom) panel.scrollTop = panel.scrollHeight;
+  if (overlayOpen && wasAtBottom) panel.scrollTop = panel.scrollHeight;
 }
 
 function showGameOver(winnerRole, pub) {
