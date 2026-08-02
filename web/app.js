@@ -1062,11 +1062,14 @@ function showCardInfo(cardName) {
 function renderBattlefield(pub, oppKey, mineKey) {
   const bf = $("battlefield");
   bf.innerHTML = "";
-  bf.appendChild(battlefieldColumn(pub[oppKey], true, pub.starsRevealed, null));
-  bf.appendChild(battlefieldColumn(pub[mineKey], false, pub.starsRevealed, lastPrivateSeen));
+  // 星星是雙方同時蓋牌:在我自己都還沒蓋星星卡之前,對手欄位不該顯示「已經蓋著一張」,
+  // 不然不管先後攻,看起來都像對手已經搶先出牌了
+  const myStarCommitted = !!(lastPrivateSeen && lastPrivateSeen.committedStar);
+  bf.appendChild(battlefieldColumn(pub[oppKey], true, pub.starsRevealed, null, myStarCommitted));
+  bf.appendChild(battlefieldColumn(pub[mineKey], false, pub.starsRevealed, lastPrivateSeen, myStarCommitted));
 }
 
-function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
+function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData, myStarCommitted) {
   const col = document.createElement("div");
   col.className = "bf-col";
   if (!snapshot) return col;
@@ -1089,8 +1092,13 @@ function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
 
   let starContent = null, starBack = false;
   if (isOpp) {
-    if (!starsRevealed) { starContent = "?"; starBack = true; }
-    else { starContent = snapshot.star || null; }
+    if (starsRevealed) {
+      starContent = snapshot.star || null;
+    } else if (myStarCommitted) {
+      // 我自己蓋好星星卡了,對手那格才跟著顯示「蓋著」,在那之前維持空白
+      starContent = "?";
+      starBack = true;
+    }
   } else {
     // 自己的星星就算還沒公開,也可以透過私密資料立刻看到自己蓋了什麼
     starContent = snapshot.star || (privateData && privateData.committedStar) || null;
