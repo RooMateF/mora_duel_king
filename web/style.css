@@ -137,11 +137,15 @@ button:hover { filter: brightness(1.1); }
 }
 
 .band {
-  background: var(--band-a);
+  background-color: var(--band-a);
+  background-image: url("img/board_texture.png");
+  background-repeat: repeat;
+  background-size: 96px 96px;
+  background-blend-mode: multiply;
   padding: 3px 8px;
   flex: 0 0 auto;
 }
-.band.bf { background: var(--band-mid); }
+.band.bf { background-color: var(--band-mid); }
 
 .band-name { font-weight: bold; font-size: 12px; margin-bottom: 2px; }
 
