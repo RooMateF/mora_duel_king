@@ -215,7 +215,15 @@ class Game {
   async pickStar(player) {
     const available = STAR_TYPES.filter((t) => player.stars[t] > 0);
     if (!available.length) return null;
-    if (this.isAiControlled(player)) return this.aiChooseStar(player, available);
+    if (this.isAiControlled(player)) {
+      const choice = this.aiChooseStar(player, available);
+      // 先把狀態寫回去,log() 觸發的畫面重繪才看得到「已經蓋牌」,UI 才能演出電腦蓋星星卡的動畫。
+      // 這行 log 只在電腦「真的先攻」時才印:電腦後攻蓋牌不需要額外橫幅動畫,也不該多停頓那段時間。
+      player.committedStar = choice;
+      const isFirst = player === (this.firstIsP1 ? this.p1 : this.p2);
+      if (isFirst) await this.ui.log(`${player.name} 蓋下星星卡。`);
+      return choice;
+    }
     const choice = await this.ui.ask(player.role, "出星星卡(蓋牌)",
       "選擇這回合的星星牌(對方看不到)",
       available.map((t) => ({ label: `${t}(剩${player.stars[t]}張)`, value: t })), "star",
@@ -504,8 +512,10 @@ class Game {
 
     await this.ui.log(`\n===== 第 ${this.roundNum} 回合 ===== (先攻:${pFirst.name})`);
 
-    this.p1.committedStar = await this.pickStar(this.p1);
-    this.p2.committedStar = await this.pickStar(this.p2);
+    // 星星蓋牌照先攻/後攻順序進行(蓋牌本身不洩漏牌面內容,只是「誰先蓋」這件事要跟真實出牌順序一致),
+    // 這樣畫面才能正確演出「先攻方先把星星卡蓋到檯面上,再輪到後攻方」
+    pFirst.committedStar = await this.pickStar(pFirst);
+    pSecond.committedStar = await this.pickStar(pSecond);
 
     this.p1.pendingMoonCard = await this.pickMoonCommit(this.p1);
     this.p2.pendingMoonCard = await this.pickMoonCommit(this.p2);

@@ -186,6 +186,9 @@ function boardSnapshotFor(p, revealStar) {
     discardCount: p.discard.length,
     playedSun: p.playedSunCards.slice(),
     star: revealStar ? p.committedStar : null,
+    // 只公開「這回合已經蓋牌了嗎」的是非值,不洩漏蓋了什麼,讓對手畫面能正確演出
+    // 先攻方先把星星卡蓋到檯面上、後攻方才輪到蓋牌的順序
+    starCommitted: p.committedStar !== null,
     playedMoon: p.moonDecided ? p.playedMoonCard : null,
     moonPending: !p.moonDecided && p.pendingMoonCard !== null,
   };
@@ -358,17 +361,26 @@ function showCoinFlip(pub) {
   setTimeout(() => { overlay.classList.add("hidden"); }, 1850);
 }
 
-// 第 2 回合以後,先攻方逐回合輪替,用一個輕量橫幅提醒是誰先出牌(第 1 回合已經有硬幣動畫負責這件事)
-function showTurnOrderBanner(pub) {
-  if (typeof pub.firstIsP1 !== "boolean") return;
-  const firstName = pub.firstIsP1 ? pub.p1.name : pub.p2.name;
+const DIFF_LABEL = { easy: "簡單", normal: "普通", hard: "困難" };
+
+// 電腦先攻蓋星星卡時:先秀「OOO(難度)的回合」橫幅,橫幅收起後再演示一張牌背從對手那側
+// 飛到戰場星星欄位的蓋牌動畫,玩家才能實際看到電腦先出牌這件事,而不是畫面毫無變化
+function showOpponentStarSetTurn(pub, oppKey, oppCol) {
+  const name = pub[oppKey].name;
+  const diffLabel = (typeof game !== "undefined" && game && game.vsAi) ? (DIFF_LABEL[game.difficulty] || "") : "";
   const banner = document.createElement("div");
   banner.className = "turn-order-banner";
-  banner.textContent = `${firstName} 先攻`;
+  banner.textContent = diffLabel ? `${name}(${diffLabel})的回合` : `${name}的回合`;
   document.body.appendChild(banner);
   nextPaint(() => banner.classList.add("show"));
-  setTimeout(() => banner.classList.remove("show"), 750);
-  setTimeout(() => banner.remove(), 1050);
+  setTimeout(() => banner.classList.remove("show"), 500);
+  setTimeout(() => {
+    banner.remove();
+    const oppBand = $("oppBand");
+    const fromEl = (oppBand && oppBand.querySelector(".band-name")) || oppBand;
+    const starWrap = oppCol.querySelector('[data-slot-kind="star"]');
+    flyGhost(fromEl, starWrap, cardImgSrc("back_star"), "?");
+  }, 650);
 }
 
 // -- 戰鬥畫面特效:翻牌、太陽強化、月亮發動、勝負對撞 -----------------
@@ -382,10 +394,10 @@ function sleep(ms) {
 // 每行 log 之後都停一下讓畫面有時間播動畫,關鍵劇情點(開場硬幣、翻牌、出招、發動、抽牌、分出勝負)停久一點
 function delayForLogLine(text) {
   if (/^\n===== 第 1 回合 =====/.test(text)) return 1900; // 等開場硬幣動畫播完
-  if (/^\n===== 第 \d+ 回合 =====/.test(text)) return 900; // 等「OOO 先攻」橫幅播完
   let extra = 0;
   if (/^★ .+ 贏得本回合!$/.test(text) || /^平手!/.test(text)) extra = 550;
   else if (/取走 .+ 的一張『.+』星星卡。/.test(text)) extra = 600; // 星星被吸走的動畫要多留一點時間
+  else if (/ 蓋下星星卡。$/.test(text)) extra = 950; // 電腦先攻蓋星星卡:橫幅 + 蓋牌動畫要多留時間播完
   else if (/揭示星星:/.test(text)) extra = 200;
   else if (/打出太陽卡:/.test(text) || /打出【烈陽】!$/.test(text)) extra = 500; // 對手出牌會有飛入動畫,留多一點時間播完
   else if (/發動【.+】/.test(text)) extra = 500;
@@ -706,13 +718,18 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
   const sunImg = (col) => col.querySelector('[data-slot-kind="sun"] .slot-card-img');
   const moonImg = (col) => col.querySelector('[data-slot-kind="moon"] .slot-card-img');
 
-  // 0) 每回合開始:先攻方逐回合輪替,但太陽/月亮階段沒有牌可出時完全不會有任何畫面差異,
-  // 玩家會誤以為「後攻方才是第一個動作的人」。開場第 1 回合已經有硬幣動畫負責這件事,
-  // 這裡補上第 2 回合以後、每回合都要播一次的輕量橫幅,把先攻方明確秀出來。
-  for (const line of newLines) {
-    const roundMatch = line.match(/^\n===== 第 (\d+) 回合 =====/);
-    if (roundMatch && roundMatch[1] !== "1") {
-      showTurnOrderBanner(pub);
+  // 0) 對手(電腦)先攻蓋星星卡時,engine.js 會多印一行「OOO 蓋下星星卡。」,
+  // 藉此撥放「OOO(難度)的回合」橫幅 + 蓋牌動畫,玩家才能實際看到電腦先出牌,
+  // 而不是畫面上什麼都沒發生、直接跳到自己的出牌提示。自己出牌是靠互動提示本身就看得出來,不需要橫幅。
+  // 電腦(vsAi 模式的 p2)每回合的星星都是走 AI 分支、都會印這行 log,不管這回合是不是真的先攻,
+  // 所以一定要另外檢查 firstIsP1 確認「這次真的是對手先出手」,不然會不分先後攻每回合都誤觸發。
+  const oppIsFirst = (oppKey === "p1") === pub.firstIsP1;
+  if (oppIsFirst) {
+    for (const line of newLines) {
+      const setMatch = line.match(/^(.+) 蓋下星星卡。$/);
+      if (setMatch && setMatch[1] === pub[oppKey].name) {
+        showOpponentStarSetTurn(pub, oppKey, oppCol);
+      }
     }
   }
 
@@ -1165,14 +1182,11 @@ function showCardInfo(cardName) {
 function renderBattlefield(pub, oppKey, mineKey) {
   const bf = $("battlefield");
   bf.innerHTML = "";
-  // 星星是雙方同時蓋牌:在我自己都還沒蓋星星卡之前,對手欄位不該顯示「已經蓋著一張」,
-  // 不然不管先後攻,看起來都像對手已經搶先出牌了
-  const myStarCommitted = !!(lastPrivateSeen && lastPrivateSeen.committedStar);
-  bf.appendChild(battlefieldColumn(pub[oppKey], true, pub.starsRevealed, null, myStarCommitted));
-  bf.appendChild(battlefieldColumn(pub[mineKey], false, pub.starsRevealed, lastPrivateSeen, myStarCommitted));
+  bf.appendChild(battlefieldColumn(pub[oppKey], true, pub.starsRevealed, null));
+  bf.appendChild(battlefieldColumn(pub[mineKey], false, pub.starsRevealed, lastPrivateSeen));
 }
 
-function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData, myStarCommitted) {
+function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
   const col = document.createElement("div");
   col.className = "bf-col";
   if (!snapshot) return col;
@@ -1197,8 +1211,9 @@ function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData, myStarCo
   if (isOpp) {
     if (starsRevealed) {
       starContent = snapshot.star || null;
-    } else if (myStarCommitted) {
-      // 我自己蓋好星星卡了,對手那格才跟著顯示「蓋著」,在那之前維持空白
+    } else if (snapshot.starCommitted) {
+      // 對手自己真的已經蓋牌了才顯示「蓋著」,這個旗標只公開是非值、不洩漏蓋了什麼,
+      // 讓畫面能正確反映先攻/後攻順序(先攻方會先出現蓋著的星星卡)
       starContent = "?";
       starBack = true;
     }

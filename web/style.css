@@ -18,7 +18,11 @@ html, body { height: 100%; }
 
 body {
   margin: 0;
-  background: var(--bg);
+  background:
+    radial-gradient(ellipse 60% 40% at 15% 0%, rgba(59,110,165,0.16), transparent 60%),
+    radial-gradient(ellipse 55% 35% at 100% 15%, rgba(201,107,31,0.14), transparent 60%),
+    radial-gradient(ellipse 60% 45% at 50% 100%, rgba(106,63,160,0.14), transparent 60%),
+    var(--bg);
   color: var(--text);
   font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
 }
@@ -76,15 +80,20 @@ h1 { margin-bottom: 0; }
 .diff-buttons button { flex: 1; min-width: 60px; }
 
 button {
-  background: var(--accent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 100%, white 22%), var(--accent) 60%, color-mix(in srgb, var(--accent) 100%, black 25%));
   color: white;
-  border: none;
-  border-radius: 6px;
+  border: 1px solid rgba(0,0,0,0.35);
+  border-radius: 8px;
   padding: 10px 16px;
   font-size: 14px;
+  font-weight: bold;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.35), 0 3px 8px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.25);
   cursor: pointer;
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s ease;
 }
-button:hover { filter: brightness(1.1); }
+button:hover { filter: brightness(1.08); }
+button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35), 0 2px 5px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.25); }
 
 .link-btn {
   background: none;
@@ -118,7 +127,16 @@ button:hover { filter: brightness(1.1); }
 }
 .topbar-btns { display: flex; gap: 6px; }
 #topBar button { padding: 5px 9px; font-size: 12px; }
-#topBar #statusText { font-size: 12.5px; }
+#topBar #statusText {
+  font-size: 12.5px;
+  font-weight: bold;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255,211,92,0.22), rgba(255,211,92,0.06));
+  border: 1px solid rgba(255,211,92,0.45);
+  color: #ffd35c;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
 @media (max-width: 420px) {
   #topBar .dim { display: none; }
 }
@@ -144,10 +162,23 @@ button:hover { filter: brightness(1.1); }
   background-blend-mode: multiply;
   padding: 3px 8px;
   flex: 0 0 auto;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
 }
-.band.bf { background-color: var(--band-mid); }
+.band.bf {
+  background-color: var(--band-mid);
+  border-color: rgba(255,211,92,0.18);
+}
 
-.band-name { font-weight: bold; font-size: 12px; margin-bottom: 2px; }
+.band-name {
+  font-weight: bold;
+  font-size: 12px;
+  margin-bottom: 2px;
+  display: inline-block;
+  padding-bottom: 1px;
+  border-bottom: 2px solid rgba(255,211,92,0.5);
+}
 
 .hand {
   display: flex;
@@ -184,9 +215,10 @@ button:hover { filter: brightness(1.1); }
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.09);
   border-radius: 8px;
-  background: rgba(255,255,255,0.03);
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015));
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.25);
   padding: 3px 2px 2px;
 }
 #oppBand .panel-grid { gap: 3px; margin-bottom: 3px; }
