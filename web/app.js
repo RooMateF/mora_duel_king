@@ -351,7 +351,10 @@ function showCoinFlip(pub) {
   coin.className = "coin " + (pub.firstIsP1 ? "spin-front" : "spin-back");
   $("coinResultText").textContent = "";
   overlay.classList.remove("hidden");
-  setTimeout(() => { $("coinResultText").textContent = `${firstName} 先攻!`; }, 1150);
+  setTimeout(() => {
+    $("coinResultText").textContent = `${firstName} 先攻!`;
+    fx($("coinResultText"), "pop");
+  }, 1150);
   setTimeout(() => { overlay.classList.add("hidden"); }, 1850);
 }
 
@@ -374,6 +377,21 @@ function delayForLogLine(text) {
   else if (/發動【.+】/.test(text)) extra = 500;
   else if (/(抽牌|抽了一張牌)。$/.test(text)) extra = 1050; // 抽牌儀式(放大置中→飛進手牌)要多留時間播完
   return 150 + extra;
+}
+
+// 勝負對撞的衝擊波:在星星卡格子中心炸開一圈光環,強化「撞上去」的力道感
+function spawnShockwave(targetEl, variant) {
+  if (!targetEl) return;
+  const rect = targetEl.getBoundingClientRect();
+  const size = rect.width * 2.6;
+  const ring = document.createElement("div");
+  ring.className = `clash-shock clash-shock-${variant}`;
+  ring.style.left = `${rect.left + rect.width / 2 - size / 2}px`;
+  ring.style.top = `${rect.top + rect.height / 2 - size / 2}px`;
+  ring.style.width = `${size}px`;
+  ring.style.height = `${size}px`;
+  document.body.appendChild(ring);
+  setTimeout(() => ring.remove(), 650);
 }
 
 function fx(el, cls) {
@@ -403,11 +421,16 @@ function nextPaint(fn) {
   setTimeout(run, 50);
 }
 
-// 讓一張卡從 fromEl 的位置飛到 toEl 的位置再消失,onArrive 在飛抵時觸發(通常接著播欄位本身的特效)
+// 讓一張卡從 fromEl 的位置飛到 toEl 的位置再消失,onArrive 在飛抵時觸發(通常接著播欄位本身的特效)。
+// 用 CSS 自訂屬性描述起點/中繼點/終點,搭配單一 keyframes 動畫走出一道拱起的弧線,
+// 比單純直線內插更有「丟一張牌出去」的力道感,中繼點還會帶一點傾斜再擺正。
 function flyGhost(fromEl, toEl, src, altText, onArrive) {
   if (!fromEl || !toEl) { if (onArrive) onArrive(); return; }
   const fromRect = fromEl.getBoundingClientRect();
   const toRect = toEl.getBoundingClientRect();
+  const dx = toRect.left - fromRect.left;
+  const dy = toRect.top - fromRect.top;
+  const arcLift = Math.max(36, Math.abs(dx) * 0.22);
   const ghost = document.createElement("img");
   ghost.src = src;
   ghost.alt = altText || "";
@@ -415,14 +438,16 @@ function flyGhost(fromEl, toEl, src, altText, onArrive) {
   ghost.style.width = `${toRect.width}px`;
   ghost.style.left = "0px";
   ghost.style.top = "0px";
-  ghost.style.transform = `translate(${fromRect.left}px, ${fromRect.top}px) scale(0.6)`;
+  ghost.style.setProperty("--fly-start-x", `${fromRect.left}px`);
+  ghost.style.setProperty("--fly-start-y", `${fromRect.top}px`);
+  ghost.style.setProperty("--fly-mid-x", `${fromRect.left + dx * 0.5}px`);
+  ghost.style.setProperty("--fly-mid-y", `${fromRect.top + dy * 0.5 - arcLift}px`);
+  ghost.style.setProperty("--fly-end-x", `${toRect.left}px`);
+  ghost.style.setProperty("--fly-end-y", `${toRect.top}px`);
+  ghost.style.transform = `translate(${fromRect.left}px, ${fromRect.top}px) scale(0.6) rotate(-8deg)`;
   ghost.style.opacity = "0.4";
   document.body.appendChild(ghost);
-  nextPaint(() => {
-    ghost.style.transition = "transform 0.42s cubic-bezier(.2,.8,.3,1), opacity 0.42s ease-out";
-    ghost.style.transform = `translate(${toRect.left}px, ${toRect.top}px) scale(1)`;
-    ghost.style.opacity = "1";
-  });
+  nextPaint(() => ghost.classList.add("fly-arc"));
   setTimeout(() => {
     ghost.remove();
     if (onArrive) onArrive();
@@ -455,10 +480,27 @@ function flyDrawCeremony(fromEl, destEl, backSrc) {
     const centerX = vw / 2 - bigWidth / 2;
     const centerY = vh * 0.4 - (bigWidth * 1.4) / 2;
 
+    // 卡片放大置中的當下,身後炸一圈光暈,加強「揭示」的儀式感
+    const glowSize = bigWidth * 2.6;
+    const glow = document.createElement("div");
+    glow.className = "draw-ceremony-glow";
+    glow.style.left = `${vw / 2 - glowSize / 2}px`;
+    glow.style.top = `${vh * 0.4 - glowSize / 2}px`;
+    glow.style.width = `${glowSize}px`;
+    glow.style.height = `${glowSize}px`;
+    document.body.appendChild(glow);
+
     nextPaint(() => {
       ghost.style.transition = "transform 0.38s cubic-bezier(.2,.8,.3,1)";
       ghost.style.transform = `translate(${centerX}px, ${centerY}px) scale(${scaleUp})`;
+      glow.classList.add("show");
     });
+
+    setTimeout(() => {
+      glow.classList.remove("show");
+      glow.classList.add("hide");
+    }, 560);
+    setTimeout(() => glow.remove(), 900);
 
     setTimeout(() => {
       const dest = typeof destEl === "function" ? destEl() : destEl;
@@ -579,6 +621,32 @@ function findStarCellImg(bandEl, starType) {
   return null;
 }
 
+// 星星揭示:把已經畫好正面的 img 換成一個雙面翻牌結構(牌背/牌面各佔一面),
+// 翻牌瞬間才把正面轉過來給玩家看,比單純的縮放進場更接近真的把蓋著的牌翻開
+function playStarFlip(col) {
+  const wrap = col.querySelector('[data-slot-kind="star"]');
+  const img = wrap && wrap.querySelector(".slot-card-img");
+  if (!wrap || !img) return;
+  const stage = document.createElement("div");
+  stage.className = "flip-stage";
+  const inner = document.createElement("div");
+  inner.className = "flip-inner";
+  const back = document.createElement("img");
+  back.className = "flip-face flip-back";
+  back.src = cardImgSrc("back_star");
+  back.draggable = false;
+  const front = document.createElement("img");
+  front.className = "flip-face flip-front";
+  front.src = img.src;
+  front.alt = img.alt;
+  front.draggable = false;
+  inner.appendChild(back);
+  inner.appendChild(front);
+  stage.appendChild(inner);
+  img.replaceWith(stage);
+  nextPaint(() => inner.classList.add("flip-run"));
+}
+
 // 星星卡被贏家拿走時,像被吸走一樣飛進贏家的星星格、縮小消失
 function flyAbsorb(fromEl, toEl, cardName, onArrive) {
   if (!fromEl || !toEl) { if (onArrive) onArrive(); return; }
@@ -626,8 +694,8 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
 
   // 1) 雙方星星同時翻牌
   if (!prevPub.starsRevealed && pub.starsRevealed) {
-    fx(starImg(oppCol), "fx-flip");
-    fx(starImg(mineCol), "fx-flip");
+    playStarFlip(oppCol);
+    playStarFlip(mineCol);
   }
 
   // 2) 太陽卡出牌/強化(牌一出現在太陽欄位就播,型別不符後續會自己收回手牌)
@@ -638,8 +706,10 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
     if (prevArr.length === 0 && nowArr.length > 0) {
       const card = nowArr[nowArr.length - 1];
       const target = sunImg(col);
-      if (isOpp) flyCardIn(bandPileTileImg($("oppBand"), "太陽手牌"), target, card, () => fx(target, "fx-sun"));
-      else fx(target, "fx-sun");
+      // 【烈陽】是太陽卡裡的強化特效卡,額外炸一圈橘色衝擊波,跟普通太陽卡出牌區隔開來
+      const burst = card === "烈陽" ? () => spawnShockwave(target, "sun") : null;
+      if (isOpp) flyCardIn(bandPileTileImg($("oppBand"), "太陽手牌"), target, card, () => { fx(target, "fx-sun"); if (burst) burst(); });
+      else { fx(target, "fx-sun"); if (burst) burst(); }
     }
   });
 
@@ -649,8 +719,10 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
     const nowMoon = (pub[key] || {}).playedMoon;
     if (!prevMoon && nowMoon) {
       const target = moonImg(col);
-      if (isOpp) flyCardIn(bandPileTileImg($("oppBand"), "月亮手牌"), target, nowMoon, () => fx(target, "fx-moon"));
-      else fx(target, "fx-moon");
+      // 【日蝕】是月亮卡裡的反制特效卡,額外炸一圈紫色衝擊波,跟普通月亮發動區隔開來
+      const burst = nowMoon === "日蝕" ? () => spawnShockwave(target, "moon") : null;
+      if (isOpp) flyCardIn(bandPileTileImg($("oppBand"), "月亮手牌"), target, nowMoon, () => { fx(target, "fx-moon"); if (burst) burst(); });
+      else { fx(target, "fx-moon"); if (burst) burst(); }
     }
   });
 
@@ -671,11 +743,18 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
       const winCol = winnerIsOpp ? oppCol : mineCol;
       const loseCol = winnerIsOpp ? mineCol : oppCol;
       const winImg = starImg(winCol), loseImg = starImg(loseCol);
-      if (winImg) { winImg.style.setProperty("--bump-dir", winnerIsOpp ? "10px" : "-10px"); fx(winImg, "fx-win"); }
+      if (winImg) {
+        winImg.style.setProperty("--bump-dir", winnerIsOpp ? "10px" : "-10px");
+        fx(winImg, "fx-win");
+        spawnShockwave(winImg, "win");
+      }
       if (loseImg) { loseImg.style.setProperty("--bump-dir", winnerIsOpp ? "-10px" : "10px"); fx(loseImg, "fx-lose"); }
+      fx($("battlefield"), "fx-shake");
     } else if (/^平手!/.test(line)) {
       fx(starImg(oppCol), "fx-tie");
       fx(starImg(mineCol), "fx-tie");
+      spawnShockwave(starImg(oppCol), "tie");
+      fx($("battlefield"), "fx-shake");
     }
 
     // 6) 星星被吸收:輸家蓋出的那張星星卡飛進贏家的星星格,像被吸走一樣
@@ -806,7 +885,7 @@ function pileCardTile(label, count, backName, drawValue) {
 }
 
 function cardImgSrc(name) {
-  return `cards/${encodeURIComponent(name)}.svg`;
+  return `cards/${encodeURIComponent(name)}.png`;
 }
 
 function handCardTile(name, kind, count, onTap, value) {

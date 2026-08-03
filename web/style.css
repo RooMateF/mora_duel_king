@@ -337,12 +337,40 @@ button:hover { filter: brightness(1.1); }
 }
 
 /* 戰鬥畫面特效:翻牌、太陽強化、月亮發動、勝負對撞(由 app.js 的 triggerBattleEffects 觸發) */
-@keyframes cardFlipIn {
-  0% { transform: rotateY(100deg) scale(0.82); filter: brightness(2.2); }
-  55% { transform: rotateY(-18deg) scale(1.06); filter: brightness(1.1); }
-  100% { transform: rotateY(0deg) scale(1); filter: brightness(1); }
+
+/* 星星揭示:雙面翻牌結構,牌背轉到 90 度時亮一下(像真的卡片在轉動時反光),轉到 180 度露出正面 */
+.flip-stage {
+  height: 8.2dvh;
+  width: auto;
+  aspect-ratio: 400 / 560;
+  display: block;
+  perspective: 900px;
 }
-.slot-card-img.fx-flip { animation: cardFlipIn 0.5s ease-out; }
+.flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+}
+.flip-inner.flip-run { animation: starFlipTurn 0.68s cubic-bezier(.34,1.1,.64,1) forwards; }
+@keyframes starFlipTurn {
+  0% { transform: rotateY(0deg); filter: brightness(1); }
+  47% { filter: brightness(1); }
+  50% { transform: rotateY(90deg); filter: brightness(2.6); }
+  53% { filter: brightness(1); }
+  100% { transform: rotateY(180deg); filter: brightness(1); }
+}
+.flip-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  display: block;
+  backface-visibility: hidden;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+}
+.flip-face.flip-front { transform: rotateY(180deg); }
 
 @keyframes sunPowerUp {
   0% { filter: brightness(1) saturate(1); box-shadow: 0 2px 5px rgba(0,0,0,0.4); }
@@ -360,19 +388,65 @@ button:hover { filter: brightness(1.1); }
 .slot-card-img.fx-moon { animation: moonActivateFx 0.55s ease-out; }
 
 @keyframes battleWin {
-  0% { transform: translateY(0) scale(1); }
-  35% { transform: translateY(var(--bump-dir, 10px)) scale(1.2); box-shadow: 0 0 26px 8px rgba(255, 211, 92, 0.9); }
-  60% { transform: translateY(calc(var(--bump-dir, 10px) * -0.35)) scale(1.12); }
-  100% { transform: translateY(0) scale(1.07); box-shadow: 0 0 14px 3px rgba(255, 211, 92, 0.65); }
+  0% { transform: translateY(0) scale(1) rotate(0deg); filter: brightness(1); }
+  30% { transform: translateY(var(--bump-dir, 10px)) scale(1.28) rotate(calc(var(--bump-dir, 10px) * 0.5)); filter: brightness(1.6); box-shadow: 0 0 34px 10px rgba(255, 211, 92, 0.95); }
+  60% { transform: translateY(calc(var(--bump-dir, 10px) * -0.35)) scale(1.14) rotate(0deg); filter: brightness(1.15); }
+  100% { transform: translateY(0) scale(1.07) rotate(0deg); filter: brightness(1); box-shadow: 0 0 14px 3px rgba(255, 211, 92, 0.65); }
 }
-.slot-card-img.fx-win { animation: battleWin 0.8s cubic-bezier(.36,.07,.19,.97); position: relative; z-index: 2; }
+.slot-card-img.fx-win { animation: battleWin 0.85s cubic-bezier(.36,.07,.19,.97); position: relative; z-index: 2; }
 
 @keyframes battleLose {
-  0% { transform: translateY(0); opacity: 1; filter: grayscale(0%); }
-  35% { transform: translateY(calc(var(--bump-dir, 10px) * -1)); }
-  100% { transform: translateY(0); opacity: 0.6; filter: grayscale(65%); }
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; filter: grayscale(0%) brightness(1); }
+  15% { transform: translateY(calc(var(--bump-dir, 10px) * -1)) rotate(calc(var(--bump-dir, 10px) * -0.6)); filter: grayscale(0%) brightness(0.6); }
+  30% { transform: translateY(calc(var(--bump-dir, 10px) * -0.5)) rotate(calc(var(--bump-dir, 10px) * 0.3)); }
+  100% { transform: translateY(0) rotate(0deg); opacity: 0.6; filter: grayscale(65%) brightness(1); }
 }
 .slot-card-img.fx-lose { animation: battleLose 0.8s ease-out forwards; }
+
+/* 勝負對撞的衝擊波光環,從星星卡格子中心炸開 */
+.clash-shock {
+  position: fixed;
+  z-index: 950;
+  pointer-events: none;
+  border-radius: 50%;
+  transform: scale(0.25);
+  opacity: 0;
+}
+.clash-shock-win {
+  border: 4px solid rgba(255, 211, 92, 0.9);
+  box-shadow: 0 0 30px 8px rgba(255, 211, 92, 0.55);
+  animation: shockExpand 0.6s cubic-bezier(.15,.8,.3,1) forwards;
+}
+.clash-shock-tie {
+  border: 4px solid rgba(190, 196, 206, 0.85);
+  box-shadow: 0 0 24px 6px rgba(190, 196, 206, 0.45);
+  animation: shockExpand 0.55s cubic-bezier(.15,.8,.3,1) forwards;
+}
+.clash-shock-sun {
+  border: 4px solid rgba(255, 150, 60, 0.9);
+  box-shadow: 0 0 32px 9px rgba(255, 150, 60, 0.6);
+  animation: shockExpand 0.6s cubic-bezier(.15,.8,.3,1) forwards;
+}
+.clash-shock-moon {
+  border: 4px solid rgba(178, 120, 255, 0.9);
+  box-shadow: 0 0 32px 9px rgba(178, 120, 255, 0.6);
+  animation: shockExpand 0.6s cubic-bezier(.15,.8,.3,1) forwards;
+}
+@keyframes shockExpand {
+  0% { transform: scale(0.25); opacity: 0.9; }
+  70% { opacity: 0.5; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+/* 分出勝負瞬間,戰場面板小小震一下,加強撞擊感 */
+@keyframes boardShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+.band.fx-shake { animation: boardShake 0.35s ease-in-out; }
 
 @keyframes battleTie {
   0%, 100% { transform: scale(1); }
@@ -398,6 +472,12 @@ button:hover { filter: brightness(1.1); }
   border-radius: 6px;
   box-shadow: 0 8px 20px rgba(0,0,0,0.6);
 }
+@keyframes flyArcMove {
+  0% { transform: translate(var(--fly-start-x), var(--fly-start-y)) scale(0.6) rotate(-8deg); opacity: 0.4; }
+  55% { transform: translate(var(--fly-mid-x), var(--fly-mid-y)) scale(0.92) rotate(5deg); opacity: 0.95; }
+  100% { transform: translate(var(--fly-end-x), var(--fly-end-y)) scale(1) rotate(0deg); opacity: 1; }
+}
+.fly-card-ghost.fly-arc { animation: flyArcMove 0.44s cubic-bezier(.3,.55,.25,1) forwards; }
 
 /* 向下滑動抽牌:手指往下拉的時候跟著滑出一張牌背,放開後繼續往下飛走並確認抽牌 */
 .draw-pull-ghost {
@@ -422,6 +502,20 @@ button:hover { filter: brightness(1.1); }
   box-shadow: 0 14px 32px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.12);
 }
 
+/* 抽牌儀式停在畫面正中央時,身後炸一圈光暈,強調「揭示」的瞬間 */
+.draw-ceremony-glow {
+  position: fixed;
+  z-index: 995;
+  pointer-events: none;
+  border-radius: 50%;
+  opacity: 0;
+  transform: scale(0.6);
+  background: radial-gradient(circle, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.16) 38%, rgba(255,255,255,0) 70%);
+  transition: opacity 0.25s ease-out, transform 0.35s ease-out;
+}
+.draw-ceremony-glow.show { opacity: 1; transform: scale(1); }
+.draw-ceremony-glow.hide { opacity: 0; transform: scale(1.15); transition: opacity 0.3s ease-in, transform 0.3s ease-in; }
+
 /* 星星被吸收時,贏家那格接到卡的瞬間亮一下 */
 @keyframes absorbReceive {
   0% { transform: scale(1); }
@@ -441,6 +535,20 @@ button:hover { filter: brightness(1.1); }
   perspective: 700px;
   width: 120px;
   height: 120px;
+  position: relative;
+}
+.coin-stage::before {
+  content: "";
+  position: absolute;
+  inset: -34px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,211,92,0.32) 0%, rgba(255,211,92,0.1) 45%, rgba(255,211,92,0) 72%);
+  z-index: -1;
+  animation: coinGlowAmbient 1.6s ease-in-out infinite;
+}
+@keyframes coinGlowAmbient {
+  0%, 100% { opacity: 0.55; transform: scale(0.94); }
+  50% { opacity: 1; transform: scale(1.08); }
 }
 .coin {
   position: relative;
@@ -467,14 +575,16 @@ button:hover { filter: brightness(1.1); }
 }
 .coin-back { transform: rotateY(180deg); }
 @keyframes coinSpinFront {
-  0% { transform: rotateY(0deg) translateY(0); }
-  50% { transform: rotateY(900deg) translateY(-46px); }
-  100% { transform: rotateY(1080deg) translateY(0); }
+  0% { transform: rotateY(0deg) translateY(0) scale(1); }
+  50% { transform: rotateY(900deg) translateY(-46px) scale(1.05); }
+  88% { transform: rotateY(1074deg) translateY(0) scale(1.1); }
+  100% { transform: rotateY(1080deg) translateY(0) scale(1); }
 }
 @keyframes coinSpinBack {
-  0% { transform: rotateY(0deg) translateY(0); }
-  50% { transform: rotateY(900deg) translateY(-46px); }
-  100% { transform: rotateY(1260deg) translateY(0); }
+  0% { transform: rotateY(0deg) translateY(0) scale(1); }
+  50% { transform: rotateY(900deg) translateY(-46px) scale(1.05); }
+  88% { transform: rotateY(1254deg) translateY(0) scale(1.1); }
+  100% { transform: rotateY(1260deg) translateY(0) scale(1); }
 }
 .coin.spin-front { animation: coinSpinFront 1.3s cubic-bezier(.25,.8,.3,1) forwards; }
 .coin.spin-back { animation: coinSpinBack 1.3s cubic-bezier(.25,.8,.3,1) forwards; }
@@ -484,6 +594,12 @@ button:hover { filter: brightness(1.1); }
   color: #ffd35c;
   min-height: 28px;
 }
+@keyframes coinResultPop {
+  0% { transform: scale(0.5); opacity: 0; text-shadow: 0 0 0 rgba(255,211,92,0); }
+  60% { transform: scale(1.18); opacity: 1; text-shadow: 0 0 14px rgba(255,211,92,0.9); }
+  100% { transform: scale(1); opacity: 1; text-shadow: 0 0 6px rgba(255,211,92,0.5); }
+}
+.coin-result.pop { display: inline-block; animation: coinResultPop 0.4s cubic-bezier(.34,1.56,.64,1); }
 .slot-empty-card {
   height: 8.2dvh;
   aspect-ratio: 400 / 560;
