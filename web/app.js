@@ -358,6 +358,19 @@ function showCoinFlip(pub) {
   setTimeout(() => { overlay.classList.add("hidden"); }, 1850);
 }
 
+// 第 2 回合以後,先攻方逐回合輪替,用一個輕量橫幅提醒是誰先出牌(第 1 回合已經有硬幣動畫負責這件事)
+function showTurnOrderBanner(pub) {
+  if (typeof pub.firstIsP1 !== "boolean") return;
+  const firstName = pub.firstIsP1 ? pub.p1.name : pub.p2.name;
+  const banner = document.createElement("div");
+  banner.className = "turn-order-banner";
+  banner.textContent = `${firstName} 先攻`;
+  document.body.appendChild(banner);
+  nextPaint(() => banner.classList.add("show"));
+  setTimeout(() => banner.classList.remove("show"), 750);
+  setTimeout(() => banner.remove(), 1050);
+}
+
 // -- 戰鬥畫面特效:翻牌、太陽強化、月亮發動、勝負對撞 -----------------
 // 純粹靠比對「上一次 render 的 snapshot」跟「這次的 snapshot」觸發,不需要引擎額外通知,
 // 這樣本機/房主/加入者三種模式都能用同一套邏輯(加入者從來不會直接執行 engine.js)。
@@ -369,6 +382,7 @@ function sleep(ms) {
 // 每行 log 之後都停一下讓畫面有時間播動畫,關鍵劇情點(開場硬幣、翻牌、出招、發動、抽牌、分出勝負)停久一點
 function delayForLogLine(text) {
   if (/^\n===== 第 1 回合 =====/.test(text)) return 1900; // 等開場硬幣動畫播完
+  if (/^\n===== 第 \d+ 回合 =====/.test(text)) return 900; // 等「OOO 先攻」橫幅播完
   let extra = 0;
   if (/^★ .+ 贏得本回合!$/.test(text) || /^平手!/.test(text)) extra = 550;
   else if (/取走 .+ 的一張『.+』星星卡。/.test(text)) extra = 600; // 星星被吸走的動畫要多留一點時間
@@ -691,6 +705,16 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
   const starImg = (col) => col.querySelector('[data-slot-kind="star"] .slot-card-img');
   const sunImg = (col) => col.querySelector('[data-slot-kind="sun"] .slot-card-img');
   const moonImg = (col) => col.querySelector('[data-slot-kind="moon"] .slot-card-img');
+
+  // 0) 每回合開始:先攻方逐回合輪替,但太陽/月亮階段沒有牌可出時完全不會有任何畫面差異,
+  // 玩家會誤以為「後攻方才是第一個動作的人」。開場第 1 回合已經有硬幣動畫負責這件事,
+  // 這裡補上第 2 回合以後、每回合都要播一次的輕量橫幅,把先攻方明確秀出來。
+  for (const line of newLines) {
+    const roundMatch = line.match(/^\n===== 第 (\d+) 回合 =====/);
+    if (roundMatch && roundMatch[1] !== "1") {
+      showTurnOrderBanner(pub);
+    }
+  }
 
   // 1) 雙方星星同時翻牌
   if (!prevPub.starsRevealed && pub.starsRevealed) {
