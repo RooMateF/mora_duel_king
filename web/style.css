@@ -124,28 +124,38 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
 }
 .dim { color: var(--text-dim); }
 
+/* 頂部只留「⟳ 回合數」與兩顆 icon 鈕,高度壓到最薄 */
 #topBar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex: 0 0 auto;
   gap: 8px;
-  padding: 3px 4px;
+  padding: 1px 2px;
 }
-.topbar-btns { display: flex; gap: 6px; }
-#topBar button { padding: 5px 9px; font-size: 12px; }
-#topBar #statusText {
+.topbar-btns { display: flex; gap: 5px; }
+.round-chip {
   font-size: 12.5px;
   font-weight: bold;
-  padding: 4px 12px;
+  padding: 2px 10px;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(255,211,92,0.22), rgba(255,211,92,0.06));
-  border: 1px solid rgba(255,211,92,0.45);
-  color: #ffd35c;
+  background: linear-gradient(180deg, rgba(217,169,74,0.20), rgba(217,169,74,0.05));
+  border: 1px solid rgba(217,169,74,0.45);
+  color: var(--gold);
+  letter-spacing: 1px;
   text-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
-@media (max-width: 420px) {
-  #topBar .dim { display: none; }
+/* icon 鈕:正圓、只放一個符號,不佔橫向空間 */
+#topBar .icon-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* 整個對戰區塊用真實視窗高度(dvh)分配,不靠捲動:每一列卡圖高度都是 dvh,
@@ -204,13 +214,23 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   color: #e9eefb;
 }
 
+/* 手牌可能一次拿到很多張(太陽+月亮),必須允許自己收縮並在必要時橫向滑動,
+   否則會把同一排的棄牌區推出畫面外、卡片被裁掉 */
 .hand {
   display: flex;
   gap: 6px;
   flex-wrap: nowrap;
-  margin-bottom: 3px;
   align-items: flex-end;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  padding-bottom: 2px;
 }
+.hand::-webkit-scrollbar { display: none; }
+.hand .hand-card-wrap { flex: 0 0 auto; }
+.hand-empty { font-size: 11px; white-space: nowrap; }
 
 .chip {
   display: flex;
@@ -227,13 +247,69 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
 .chip-discard { background: linear-gradient(180deg, #3b4760, #2a3448); }
 .chip-count { font-size: 12px; font-weight: bold; }
 
-/* 六格面板:上排星星卡持有量、下排太陽庫/月亮庫/棄牌區,自己跟對手共用同一個結構,
-   對手的版本靠 #oppBand 的尺寸覆寫縮小簡化 */
-.panel-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+/* ── 對手區:資訊壓到最低,一列排完 ───────────────────────────── */
+.opp-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+/* 對手手牌張數:最左上角的兩個極小卡背圖示 */
+.opp-hand-icons { display: flex; gap: 3px; }
+#oppBand .opp-hand-icons .pile-back { height: 2.5dvh; }
+/* 這兩個圖示只需要看到張數,標籤純粹給動畫程式定位用,視覺上藏起來省空間 */
+.opp-hand-icons .pile-tile-label {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.opp-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 6px;
+}
+/* 對手星星剩量:一排極小的手勢圖示 + 數字,不畫卡格,省空間又不會因超過 3 張而失真 */
+.opp-stars {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: linear-gradient(180deg, rgba(6,10,20,0.45), rgba(6,10,20,0.15));
+  box-shadow: inset 0 2px 5px rgba(0,0,0,0.4);
+}
+.opp-star { display: flex; align-items: center; gap: 2px; }
+.opp-star-ico {
+  width: 13px;
+  height: 13px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  opacity: 0.85;
+}
+.opp-star-n { font-size: 11.5px; font-weight: bold; color: #cfdbf0; }
+/* 該型別打光:圖示與數字一起壓暗,一眼看出對手這型別沒牌了 */
+.opp-star.depleted .opp-star-ico { opacity: 0.28; }
+.opp-star.depleted .opp-star-n { color: #5d6b85; }
+
+/* ── 我方區:上排 牌庫|星星庫存|牌庫,下排 手牌|棄牌 ─────────── */
+.my-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+.my-row-hand { align-items: center; }
+/* 中央三格星星庫存槽,對應設計圖下方帶正中間那條凹槽 */
+.star-strip {
+  display: flex;
   gap: 4px;
-  margin-bottom: 4px;
+  flex: 1 1 auto;
+  justify-content: center;
 }
 /* 設計圖的星星庫存列是嵌在一個內凹的長條槽裡,這裡用內陰影 + 淡邊框做出同樣的凹陷感 */
 .panel-cell {
@@ -251,8 +327,6 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   border-color: rgba(150,180,220,0.28);
   background: linear-gradient(180deg, rgba(12,26,48,0.5), rgba(30,56,94,0.2));
 }
-#oppBand .panel-grid { gap: 3px; margin-bottom: 3px; }
-#oppBand .panel-cell { padding: 2px 1px 1px; border-radius: 6px; }
 
 .hand-card-wrap {
   position: relative;
@@ -598,7 +672,8 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   50% { transform: scale(1.3); box-shadow: 0 0 20px 7px rgba(255,255,255,0.7); }
   100% { transform: scale(1); }
 }
-.hand-card.fx-absorb-receive { animation: absorbReceive 0.4s ease-out; position: relative; z-index: 3; }
+/* 不綁 .hand-card:對手區的星星剩量是小數字格,不是卡圖,也要能接收這個動畫 */
+.fx-absorb-receive { animation: absorbReceive 0.4s ease-out; position: relative; z-index: 3; }
 
 /* 開場硬幣:決定先攻/後攻 */
 .coin-flip-box {
@@ -735,28 +810,13 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
 .slot-sym { background-size: 54% auto; opacity: 0.38; }
 .slot-deco { background-size: 100% 100%; opacity: 0.75; }
 
-/* 星星存量指示:設計圖星星格底部的三顆菱形 */
-.star-pips {
-  display: flex;
-  gap: 3px;
-  justify-content: center;
-  margin-top: 2px;
+/* 桌墊上印的空凹槽(該型別星星全部打光時才露出來):本身已是暗色設計,
+   不要再疊灰階,不然拳頭/手掌/剪刀的線條會糊掉。壓低不透明度表達「這格空了」。 */
+.hand-card.hand-card-socket {
+  filter: none;
+  opacity: 0.55;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.5);
 }
-.star-pip {
-  width: 5px;
-  height: 5px;
-  transform: rotate(45deg);
-  border: 1px solid rgba(180,200,230,0.5);
-  background: transparent;
-}
-.star-pip.on { background: var(--star); border-color: var(--star); }
-.band[data-side="mine"] .star-pip.on { background: #8fb6e8; border-color: #8fb6e8; }
-#oppBand .star-pip { width: 3.5px; height: 3.5px; gap: 2px; }
-
-/* 星星庫存的底座卡框:本身已是暗色設計,不要再疊灰階,不然拳頭/剪刀的線條會糊掉 */
-.hand-card.hand-card-socket { filter: none; opacity: 0.95; }
-/* 該型別打光(x0):整格壓暗,一眼看出「這型別沒牌了」 */
-.hand-card.hand-card-socket.socket-depleted { filter: grayscale(70%) brightness(0.45); opacity: 0.6; }
 
 .pile-tile-wrap {
   position: relative;

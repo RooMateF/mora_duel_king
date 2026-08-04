@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>猜☆拳☆王</title>
-<link rel="stylesheet" href="style.css?v=22">
+<link rel="stylesheet" href="style.css?v=23">
 </head>
 <body>
 
@@ -44,13 +44,13 @@
 </div>
 
 <div id="gameScreen" class="screen hidden">
+  <!-- 頂部壓到最薄:回合用「⟳ 數字」,紀錄/規則只留 icon,把畫面高度讓給戰場 -->
   <div id="topBar">
+    <span id="statusText" class="round-chip"></span>
     <div class="topbar-btns">
-      <button id="rulesBtn">規則說明</button>
-      <button id="logToggleBtn">紀錄</button>
+      <button id="logToggleBtn" class="icon-btn" title="對戰紀錄" aria-label="對戰紀錄">☰</button>
+      <button id="rulesBtn" class="icon-btn" title="規則說明(含操作方式)" aria-label="規則說明">?</button>
     </div>
-    <span id="statusText"></span>
-    <span class="dim" style="font-size:12px;">長按卡片看效果;拖曳卡片到欄位出牌,或點卡片後按下方按鈕確認</span>
   </div>
   <div id="board">
     <div id="oppBand" class="band"></div>
@@ -112,9 +112,9 @@
 <script src="firebase-config.js"></script>
 <!-- ?v= 是手動版本號,每次改動 rules.js/engine.js/net.js/app.js/style.css 就要遞增,
      避免玩家瀏覽器快取到部署前的舊版程式碼、看不到最新的修正 -->
-<script src="rules.js?v=22"></script>
-<script src="engine.js?v=22"></script>
-<script src="net.js?v=22"></script>
-<script src="app.js?v=22"></script>
+<script src="rules.js?v=23"></script>
+<script src="engine.js?v=23"></script>
+<script src="net.js?v=23"></script>
+<script src="app.js?v=23"></script>
 </body>
 </html>

@@ -332,7 +332,7 @@ function renderPublic(pub) {
   lastPublicSeen = pub;
   const mineKey = myRole === "p1" ? "p1" : "p2";
   const oppKey = myRole === "p1" ? "p2" : "p1";
-  $("statusText").textContent = `第 ${pub.round} 回合`;
+  $("statusText").textContent = `⟳ ${pub.round}`;
   renderBand($("oppBand"), pub[oppKey], true, null);
   renderBand($("myBand"), pub[mineKey], false, lastPrivateSeen);
   renderBattlefield(pub, oppKey, mineKey);
@@ -644,7 +644,8 @@ function findStarCellImg(bandEl, starType) {
   for (const img of imgs) {
     if (img.alt === starType) return img;
   }
-  return null;
+  // 對手區的星星剩量是壓縮過的小數字列(沒有卡圖),吸收動畫改飛到對應型別那一格
+  return bandEl.querySelector(`.opp-star[data-star-type="${starType}"]`);
 }
 
 // 星星揭示:把已經畫好正面的 img 換成一個雙面翻牌結構(牌背/牌面各佔一面),
@@ -820,73 +821,128 @@ function renderBand(container, snapshot, isOpp, privateData) {
   container.dataset.side = isOpp ? "opp" : "mine";
   if (!snapshot) return;
 
+  if (isOpp) renderOppBand(container, snapshot);
+  else renderMyBand(container, snapshot, privateData);
+}
+
+// 對手區(設計圖上方深色帶):資訊量壓到最低,只保留「看得到才公平」的公開情報。
+// 版面:最左上角一排極小的手牌張數圖示 → 名條 → 月亮庫 / 星星剩量 / 太陽庫 / 棄牌。
+function renderOppBand(container, snapshot) {
+  const topRow = document.createElement("div");
+  topRow.className = "opp-top";
+
+  // 對手的太陽/月亮手牌張數:設計圖沒有這一區,依需求用極小圖示塞在最左上角。
+  // 保留 pileCardTile 的結構(含 .pile-tile-label),抽牌動畫才找得到飛行起點。
+  const handIcons = document.createElement("div");
+  handIcons.className = "opp-hand-icons";
+  handIcons.appendChild(pileCardTile("太陽手牌", snapshot.handSunCount, "back_sun"));
+  handIcons.appendChild(pileCardTile("月亮手牌", snapshot.handMoonCount, "back_moon"));
+  topRow.appendChild(handIcons);
+
   const nameEl = document.createElement("div");
   nameEl.className = "band-name";
-  nameEl.textContent = snapshot.name + (isOpp ? "" : "(你)");
+  nameEl.textContent = snapshot.name;
+  topRow.appendChild(nameEl);
+  container.appendChild(topRow);
+
+  const row = document.createElement("div");
+  row.className = "opp-row";
+
+  row.appendChild(pileCardTile("月亮庫", snapshot.moonPileCount, "back_moon"));
+
+  // 對手的星星剩量壓成一排極小數字(✊3 ✋2 ✌0)。星星會因為吸收而超過 3 張,
+  // 所以直接顯示數字而不是畫格子,既省空間又不會失真。打空的型別壓暗。
+  const stars = document.createElement("div");
+  stars.className = "opp-stars";
+  STAR_TYPES.forEach((t) => {
+    const n = snapshot.stars[t];
+    const cell = document.createElement("span");
+    cell.className = "opp-star" + (n === 0 ? " depleted" : "");
+    // 星星被搶走的吸收動畫要飛到對應型別,標上型別供 findStarCellImg 定位
+    cell.dataset.starType = t;
+    const ico = document.createElement("span");
+    ico.className = "opp-star-ico";
+    ico.style.backgroundImage = `url("${STAR_GLYPH_SRC[t]}")`;
+    const num = document.createElement("span");
+    num.className = "opp-star-n";
+    num.textContent = n;
+    cell.appendChild(ico);
+    cell.appendChild(num);
+    stars.appendChild(cell);
+  });
+  row.appendChild(stars);
+
+  row.appendChild(pileCardTile("太陽庫", snapshot.sunPileCount, "back_sun"));
+  row.appendChild(pileChip("棄牌", snapshot.discardCount, "discard"));
+  container.appendChild(row);
+}
+
+// 我方區(設計圖下方藍色帶):
+// 上排 = 太陽庫 / 三格星星庫存 / 月亮庫,下排 = 星星庫 / 手牌 / 棄牌
+function renderMyBand(container, snapshot, privateData) {
+  const nameEl = document.createElement("div");
+  nameEl.className = "band-name";
+  nameEl.textContent = snapshot.name + "(你)";
   container.appendChild(nameEl);
 
-  const askKind = !isOpp && pendingAsk ? pendingAsk.kind : null;
+  const askKind = pendingAsk ? pendingAsk.kind : null;
   if (askKind === "star" || askKind === "sun" || askKind === "moonCommit" || askKind === "drawPile") {
     container.appendChild(actionPromptEl(pendingAsk.prompt));
     if (armedValue !== null) container.appendChild(confirmBarEl());
   }
 
-  // 六格面板:上排星星卡持有量,下排太陽庫/月亮庫/棄牌區;對手一樣的結構,只是縮小簡化
-  const grid = document.createElement("div");
-  grid.className = "panel-grid" + (isOpp ? " panel-grid-opp" : "");
+  const drawPickable = askKind === "drawPile";
+  const drawValueFor = (t) => (drawPickable && pendingAsk.options.some((o) => o.value === t) ? t : null);
+
+  // 上排:牌庫夾住中間的星星庫存槽,對應設計圖下方帶的左右牌堆 + 中央三格
+  const topRow = document.createElement("div");
+  topRow.className = "my-row";
+  topRow.appendChild(pileCardTile("太陽庫", snapshot.sunPileCount, "back_sun", drawValueFor("太陽")));
+
+  const slotStrip = document.createElement("div");
+  slotStrip.className = "star-strip";
   STAR_TYPES.forEach((t) => {
-    const selectable = !isOpp && askKind === "star" && pendingAsk.options.some((o) => o.value === t);
+    const selectable = askKind === "star" && pendingAsk.options.some((o) => o.value === t);
     const cell = document.createElement("div");
     cell.className = "panel-cell";
-    cell.appendChild(handCardTile(t, "star", snapshot.stars[t], selectable ? () => resolvePendingAsk(t) : null, t, isOpp ? "opp" : "mine"));
-    grid.appendChild(cell);
+    cell.appendChild(handCardTile(t, "star", snapshot.stars[t], selectable ? () => resolvePendingAsk(t) : null, t, "mine"));
+    slotStrip.appendChild(cell);
   });
-  const drawPickable = !isOpp && askKind === "drawPile";
-  const sunDrawValue = drawPickable && pendingAsk.options.some((o) => o.value === "太陽") ? "太陽" : null;
-  const moonDrawValue = drawPickable && pendingAsk.options.some((o) => o.value === "月亮") ? "月亮" : null;
-  const sunCell = document.createElement("div");
-  sunCell.className = "panel-cell";
-  sunCell.appendChild(pileCardTile("太陽庫", snapshot.sunPileCount, "back_sun", sunDrawValue));
-  grid.appendChild(sunCell);
-  const moonCell = document.createElement("div");
-  moonCell.className = "panel-cell";
-  moonCell.appendChild(pileCardTile("月亮庫", snapshot.moonPileCount, "back_moon", moonDrawValue));
-  grid.appendChild(moonCell);
-  const discardCell = document.createElement("div");
-  discardCell.className = "panel-cell";
-  discardCell.appendChild(pileChip("棄牌", snapshot.discardCount, "discard"));
-  grid.appendChild(discardCell);
-  container.appendChild(grid);
+  topRow.appendChild(slotStrip);
+  topRow.appendChild(pileCardTile("月亮庫", snapshot.moonPileCount, "back_moon", drawValueFor("月亮")));
+  container.appendChild(topRow);
+
+  // 下排:手牌 + 棄牌。設計圖左下角那張小星星卡在本作沒有對應資料
+  // (星星不是一疊牌庫,而是三個型別各自的持有數),所以不畫,避免顯示假資訊。
+  const btmRow = document.createElement("div");
+  btmRow.className = "my-row my-row-hand";
 
   const handEl = document.createElement("div");
   handEl.className = "hand";
-  if (isOpp) {
-    handEl.appendChild(pileCardTile("太陽手牌", snapshot.handSunCount, "back_sun"));
-    handEl.appendChild(pileCardTile("月亮手牌", snapshot.handMoonCount, "back_moon"));
-  } else {
-    const priv = privateData || { handSun: [], handMoon: [] };
-    const sunPickable = askKind === "sun";
-    const moonPickable = askKind === "moonCommit";
-    (priv.handSun || []).forEach((c) => {
-      const selectable = sunPickable && pendingAsk.options.some((o) => o.value === c);
-      handEl.appendChild(handCardTile(c, "sun", null, selectable ? () => resolvePendingAsk(c) : null, c));
-    });
-    (priv.handMoon || []).forEach((c) => {
-      const selectable = moonPickable && pendingAsk.options.some((o) => o.value === c);
-      handEl.appendChild(handCardTile(c, "moon", null, selectable ? () => resolvePendingAsk(c) : null, c));
-    });
-    if (!(priv.handSun || []).length && !(priv.handMoon || []).length) {
-      const span = document.createElement("span");
-      span.className = "dim";
-      span.textContent = "(手上沒有太陽/月亮卡)";
-      handEl.appendChild(span);
-    }
-    if (sunPickable || moonPickable) {
-      const skipOpt = pendingAsk.options.find((o) => o.value === null || o.value === undefined);
-      if (skipOpt) handEl.appendChild(skipTile(skipOpt.label, () => resolvePendingAsk(null)));
-    }
+  const priv = privateData || { handSun: [], handMoon: [] };
+  const sunPickable = askKind === "sun";
+  const moonPickable = askKind === "moonCommit";
+  (priv.handSun || []).forEach((c) => {
+    const selectable = sunPickable && pendingAsk.options.some((o) => o.value === c);
+    handEl.appendChild(handCardTile(c, "sun", null, selectable ? () => resolvePendingAsk(c) : null, c));
+  });
+  (priv.handMoon || []).forEach((c) => {
+    const selectable = moonPickable && pendingAsk.options.some((o) => o.value === c);
+    handEl.appendChild(handCardTile(c, "moon", null, selectable ? () => resolvePendingAsk(c) : null, c));
+  });
+  if (!(priv.handSun || []).length && !(priv.handMoon || []).length) {
+    const span = document.createElement("span");
+    span.className = "dim hand-empty";
+    span.textContent = "(沒有太陽/月亮卡)";
+    handEl.appendChild(span);
   }
-  container.appendChild(handEl);
+  if (sunPickable || moonPickable) {
+    const skipOpt = pendingAsk.options.find((o) => o.value === null || o.value === undefined);
+    if (skipOpt) handEl.appendChild(skipTile(skipOpt.label, () => resolvePendingAsk(null)));
+  }
+  btmRow.appendChild(handEl);
+  btmRow.appendChild(pileChip("棄牌", snapshot.discardCount, "discard"));
+  container.appendChild(btmRow);
 }
 
 function pileChip(label, count, kind) {
@@ -941,6 +997,10 @@ const STAR_SOCKET_SRC = {
   opp:  { "石頭": "img/socket_石頭.png",      "布": "img/socket_布.png",      "剪刀": "img/socket_剪刀.png" },
   mine: { "石頭": "img/socket_石頭_blue.png", "布": "img/socket_布_blue.png", "剪刀": "img/socket_剪刀_blue.png" },
 };
+
+// 對手區星星剩量用的小手勢圖示,直接從上面那些底座卡框裁出中央圖案(白色圖案 + 透明背景),
+// 用 CSS 上色縮小。沿用設計圖自己的手勢造型,比彩色 emoji 更貼合深藍金的典雅風格。
+const STAR_GLYPH_SRC = { "石頭": "img/glyph_石頭.png", "布": "img/glyph_布.png", "剪刀": "img/glyph_剪刀.png" };
 
 // ─── 天體卡框:對照 battlefield_layout_slots_v2.png 的空欄位,用向量 SVG 重現 ───
 // 太陽/星星/月亮各自的置中 symbol(浮水印),外圈同心橢圓、四邊菱形標記、邊角刻痕則統一由 frameDeco 疊上。
@@ -1004,12 +1064,12 @@ function handCardTile(name, kind, count, onTap, value, side) {
   const wrap = document.createElement("div");
   const isArmed = onTap && armedValue !== null && value !== undefined && armedValue === value;
   wrap.className = "hand-card-wrap" + (isArmed ? " armed" : "");
-  // 星星庫存列一律顯示設計圖的「底座」卡框(拳頭/手掌/剪刀),不再顯示實際卡圖:
-  // 底座本身就代表這個型別,剩幾張改用下方的 ◇ pips + 數字表示。打光(x0)時整格轉暗。
-  const socketSrc = kind === "star" ? (STAR_SOCKET_SRC[side === "opp" ? "opp" : "mine"] || {})[name] : null;
+  // 底座卡框(拳頭/手掌/剪刀)是「桌墊上印的凹槽」,平常被實際的星星卡壓住看不到,
+  // 只有這個型別全部打光(x0)時才露出來,代表這格空了。
+  const depleted = kind === "star" && count === 0;
+  const socketSrc = depleted ? (STAR_SOCKET_SRC[side === "opp" ? "opp" : "mine"] || {})[name] : null;
   const img = document.createElement("img");
-  img.className = `hand-card card-${kind}` + (onTap ? " selectable" : "") +
-    (socketSrc ? " hand-card-socket" : "") + (socketSrc && count === 0 ? " socket-depleted" : "");
+  img.className = `hand-card card-${kind}` + (onTap ? " selectable" : "") + (socketSrc ? " hand-card-socket" : "");
   img.src = socketSrc || cardImgSrc(name);
   img.alt = name;
   img.draggable = false;
@@ -1023,18 +1083,8 @@ function handCardTile(name, kind, count, onTap, value, side) {
   });
   wrap.appendChild(img);
   if (count !== null && count !== undefined) {
-    // 設計圖的星星格底部有三顆菱形當存量指示。星星會因為對戰吸收而超過 3 張,
-    // pips 只畫到 3 顆會失真,所以數字 badge 一律保留,pips 純粹當視覺呼應。
-    if (socketSrc) {
-      const pips = document.createElement("div");
-      pips.className = "star-pips";
-      for (let i = 0; i < 3; i++) {
-        const p = document.createElement("span");
-        p.className = "star-pip" + (i < Math.min(count, 3) ? " on" : "");
-        pips.appendChild(p);
-      }
-      wrap.appendChild(pips);
-    }
+    // 不自己畫 ◇ pips:底座圖本身已經印了三顆菱形,張數一律用數字 badge 表示
+    // (星星會因為對戰吸收而超過 3 張,pips 只畫 3 顆會失真)。
     const badge = document.createElement("span");
     badge.className = "hand-card-count";
     badge.textContent = `x${count}`;
