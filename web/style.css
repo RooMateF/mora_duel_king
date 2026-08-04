@@ -369,23 +369,6 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   margin-bottom: 3px;
 }
 .my-row-hand { align-items: center; }
-/* 星星格角落的型別標記(桌墊上印的位置標籤),避免三張一樣的卡背分不出哪格是什麼 */
-.star-cell { position: relative; }
-.star-cell-tag {
-  position: absolute;
-  top: 2px;
-  left: 3px;
-  z-index: 2;
-  width: 13px;
-  height: 13px;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: contain;
-  opacity: 0.75;
-  pointer-events: none;
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.8));
-}
-
 /* 中央三格星星庫存槽,對應設計圖下方帶正中間那條凹槽 */
 .star-strip {
   display: flex;
@@ -914,12 +897,6 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
 .slot-sym { background-size: 54% auto; opacity: 0.38; }
 .slot-deco { background-size: 100% 100%; opacity: 0.75; }
 
-/* 星星庫存格還有牌時顯示星星卡背。卡背本身就是深藍星空,不要再疊 45% 灰階,
-   不然星芒會糊掉;疊一點藍色光暈呼應「這疊牌還在」。 */
-.hand-card.hand-card-star-back {
-  filter: none;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.45), 0 0 8px 1px rgba(159,180,216,0.3);
-}
 /* 該型別打完(x0)才出現的桌墊底座:壓低亮度與不透明度表達「這一格空了」。
    本身已是暗色設計,不再疊灰階,不然拳頭/手掌/剪刀的線條會糊掉。 */
 .hand-card.hand-card-socket {

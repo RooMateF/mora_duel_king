@@ -969,14 +969,7 @@ function renderMyBand(container, snapshot, privateData) {
   STAR_TYPES.forEach((t) => {
     const selectable = askKind === "star" && pendingAsk.options.some((o) => o.value === t);
     const cell = document.createElement("div");
-    cell.className = "panel-cell star-cell";
-    // 三格都疊著同一張星星卡背,沒有標記就分不出哪格是石頭/布/剪刀。
-    // 桌墊本來就是靠印在格子上的圖案標示位置,所以在角落放一個小手勢標記。
-    const tag = document.createElement("span");
-    tag.className = "star-cell-tag";
-    tag.style.backgroundImage = `url("${STAR_GLYPH_SRC[t]}")`;
-    tag.title = t;
-    cell.appendChild(tag);
+    cell.className = "panel-cell";
     cell.appendChild(handCardTile(t, "star", snapshot.stars[t], selectable ? () => resolvePendingAsk(t) : null, t, "mine"));
     slotStrip.appendChild(cell);
   });
@@ -1136,15 +1129,13 @@ function handCardTile(name, kind, count, onTap, value, side) {
   const wrap = document.createElement("div");
   const isArmed = onTap && armedValue !== null && value !== undefined && armedValue === value;
   wrap.className = "hand-card-wrap" + (isArmed ? " armed" : "");
-  // 星星庫存格:還有牌時顯示星星卡背(牌是蓋著疊在桌墊上的,所以是卡背而不是插畫),
+  // 星星庫存格:還有牌時顯示該張星星卡的正面卡圖(型別一眼就分得出來),
   // 這個型別打完(x0)時才換成桌墊上印的底座(拳頭/手掌/剪刀),代表這一格空了。
-  // 實際插畫沒有消失 —— 長按任何一格都會跳出放大的卡圖與效果說明。
   const depleted = kind === "star" && count === 0;
   const socketSrc = depleted ? (STAR_SOCKET_SRC[side === "opp" ? "opp" : "mine"] || {})[name] : null;
   const img = document.createElement("img");
-  img.className = `hand-card card-${kind}` + (onTap ? " selectable" : "") +
-    (socketSrc ? " hand-card-socket" : "") + (kind === "star" && !socketSrc ? " hand-card-star-back" : "");
-  img.src = socketSrc || cardImgSrc(kind === "star" ? "back_star" : name);
+  img.className = `hand-card card-${kind}` + (onTap ? " selectable" : "") + (socketSrc ? " hand-card-socket" : "");
+  img.src = socketSrc || cardImgSrc(name);
   img.alt = name;
   img.draggable = false;
   attachInteractiveCard(img, {
