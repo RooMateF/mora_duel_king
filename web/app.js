@@ -815,6 +815,11 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
   }
 }
 
+// 單人模式我方玩家名字本來就叫「你」,再加後綴會變成「你(你)」
+function myDisplayName(name) {
+  return name === "你" ? name : `${name}(你)`;
+}
+
 function renderBand(container, snapshot, isOpp, privateData) {
   container.innerHTML = "";
   // 依設計圖分區上色:對手側(上)深色、我方側(下)藍色
@@ -828,27 +833,23 @@ function renderBand(container, snapshot, isOpp, privateData) {
 // 對手區(設計圖上方深色帶):資訊量壓到最低,只保留「看得到才公平」的公開情報。
 // 版面:最左上角一排極小的手牌張數圖示 → 名條 → 月亮庫 / 星星剩量 / 太陽庫 / 棄牌。
 function renderOppBand(container, snapshot) {
-  const topRow = document.createElement("div");
-  topRow.className = "opp-top";
+  // 對手區全部塞進同一列:左上角手牌圖示 + 名字,接著星星剩量、牌庫、棄牌。
+  // 不分兩行,避免左上角的手牌圖示和左側牌庫上下疊成一團,也把高度讓給戰場。
+  const row = document.createElement("div");
+  row.className = "opp-row";
 
-  // 對手的太陽/月亮手牌張數:設計圖沒有這一區,依需求用極小圖示塞在最左上角。
+  // 對手的太陽/月亮手牌張數:設計圖沒有這一區,依需求用極小圖示放最左邊。
   // 保留 pileCardTile 的結構(含 .pile-tile-label),抽牌動畫才找得到飛行起點。
   const handIcons = document.createElement("div");
   handIcons.className = "opp-hand-icons";
   handIcons.appendChild(pileCardTile("太陽手牌", snapshot.handSunCount, "back_sun"));
   handIcons.appendChild(pileCardTile("月亮手牌", snapshot.handMoonCount, "back_moon"));
-  topRow.appendChild(handIcons);
+  row.appendChild(handIcons);
 
   const nameEl = document.createElement("div");
-  nameEl.className = "band-name";
+  nameEl.className = "band-name opp-name";
   nameEl.textContent = snapshot.name;
-  topRow.appendChild(nameEl);
-  container.appendChild(topRow);
-
-  const row = document.createElement("div");
-  row.className = "opp-row";
-
-  row.appendChild(pileCardTile("月亮庫", snapshot.moonPileCount, "back_moon"));
+  row.appendChild(nameEl);
 
   // 對手的星星剩量壓成一排極小數字(✊3 ✋2 ✌0)。星星會因為吸收而超過 3 張,
   // 所以直接顯示數字而不是畫格子,既省空間又不會失真。打空的型別壓暗。
@@ -873,6 +874,7 @@ function renderOppBand(container, snapshot) {
   row.appendChild(stars);
 
   row.appendChild(pileCardTile("太陽庫", snapshot.sunPileCount, "back_sun"));
+  row.appendChild(pileCardTile("月亮庫", snapshot.moonPileCount, "back_moon"));
   row.appendChild(pileChip("棄牌", snapshot.discardCount, "discard"));
   container.appendChild(row);
 }
@@ -882,7 +884,7 @@ function renderOppBand(container, snapshot) {
 function renderMyBand(container, snapshot, privateData) {
   const nameEl = document.createElement("div");
   nameEl.className = "band-name";
-  nameEl.textContent = snapshot.name + "(你)";
+  nameEl.textContent = myDisplayName(snapshot.name);
   container.appendChild(nameEl);
 
   const askKind = pendingAsk ? pendingAsk.kind : null;
@@ -1332,7 +1334,7 @@ function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
 
   const label = document.createElement("div");
   label.className = "bf-label";
-  label.textContent = snapshot.name + (isOpp ? "" : "(你)") + " 的出牌";
+  label.textContent = isOpp ? snapshot.name : myDisplayName(snapshot.name);
   col.appendChild(label);
 
   const moonActivateAsk = !isOpp && pendingAsk && pendingAsk.kind === "moonActivate" ? pendingAsk : null;

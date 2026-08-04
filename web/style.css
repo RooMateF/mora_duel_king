@@ -160,15 +160,44 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
 
 /* 整個對戰區塊用真實視窗高度(dvh)分配,不靠捲動:每一列卡圖高度都是 dvh,
    總和抓得比可用空間保守一些,避免在矮螢幕上還要再捲一次 */
+/* 三個橫帶要撐滿整個可用高度(設計圖是滿版的),不能只堆在上面、下面留一大塊空白。
+   戰場是主角所以給它成長權重,兩側資源帶維持自己的內容高度。 */
 #board {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   border-radius: 10px;
   overflow-y: auto;
   overflow-x: hidden;
+}
+#oppBand, #myBand { flex: 0 0 auto; }
+/* 兩排出牌區要相鄰、一起置中(設計圖是中央一條分隔線把兩排隔開),
+   不能用 space-evenly 把兩排推到天南地北 */
+#battlefield {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+/* 兩排之間的細分隔線 + 中央菱形,呼應設計圖 */
+.bf-col + .bf-col {
+  border-top: 1px solid rgba(217,169,74,0.28);
+  padding-top: 4px;
+  position: relative;
+}
+.bf-col + .bf-col::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  background: rgba(217,169,74,0.5);
+  transform: translate(-50%, -50%) rotate(45deg);
 }
 
 /* 三個橫帶(對手資源 / 戰場 / 我方資源)。設計圖是靠底色深淺 + 一條細金線分隔,
@@ -247,16 +276,19 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
 .chip-discard { background: linear-gradient(180deg, #3b4760, #2a3448); }
 .chip-count { font-size: 12px; font-weight: bold; }
 
-/* ── 對手區:資訊壓到最低,一列排完 ───────────────────────────── */
-.opp-top {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 2px;
+/* ── 對手區:資訊壓到最低,全部一列排完 ─────────────────────────── */
+/* 對手手牌張數:最左邊的兩個極小卡背圖示 */
+.opp-hand-icons { display: flex; gap: 3px; flex: 0 0 auto; }
+.opp-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  margin-bottom: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-/* 對手手牌張數:最左上角的兩個極小卡背圖示 */
-.opp-hand-icons { display: flex; gap: 3px; }
-#oppBand .opp-hand-icons .pile-back { height: 2.5dvh; }
+#oppBand .opp-hand-icons .pile-back { height: 3.2dvh; }
 /* 這兩個圖示只需要看到張數,標籤純粹給動畫程式定位用,視覺上藏起來省空間 */
 .opp-hand-icons .pile-tile-label {
   position: absolute;
@@ -264,12 +296,23 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   overflow: hidden;
   clip-path: inset(50%);
 }
+/* 標籤藏起來後,通用的 .pile-tile-wrap 徽章位移(為了讓開文字標籤)會讓數字浮到圖示上方,
+   這兩個小圖示要把徽章拉回右下角貼齊卡背 */
+.opp-hand-icons .hand-card-count {
+  right: -3px;
+  bottom: -3px;
+  font-size: 8.5px;
+  padding: 0 3px;
+}
 .opp-row {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
 }
+/* 星星剩量吃掉中間剩餘空間,把牌庫/棄牌推到右邊,左邊留給手牌圖示與名字 */
+.opp-row .opp-stars { margin-right: auto; }
+#oppBand .chip { padding: 2px 5px; min-width: 34px; }
 /* 對手星星剩量:一排極小的手勢圖示 + 數字,不畫卡格,省空間又不會因超過 3 張而失真 */
 .opp-stars {
   display: flex;
@@ -333,7 +376,7 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   display: inline-block;
 }
 .hand-card {
-  height: 10.5dvh;
+  height: 11.5dvh;
   width: auto;
   aspect-ratio: 400 / 560;
   border-radius: 6px;
@@ -343,7 +386,7 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
 }
 /* 對手的星星參考列不會被打出,不需要跟自己的手牌一樣大 */
-#oppBand .hand-card { height: 3.6dvh; }
+#oppBand .hand-card { height: 4.2dvh; }
 .hand-card.selectable {
   filter: none;
   cursor: grab;
@@ -458,7 +501,7 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
 .slot-wrap { position: relative; display: flex; flex-direction: column; align-items: center; width: auto; perspective: 500px; }
 .slot-header { font-size: 9.5px; color: var(--text-dim); margin-bottom: 1px; }
 .slot-card-img {
-  height: 8.2dvh;
+  height: 15dvh;
   width: auto;
   aspect-ratio: 400 / 560;
   border-radius: 6px;
@@ -487,7 +530,7 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
 
 /* 星星揭示:雙面翻牌結構,牌背轉到 90 度時亮一下(像真的卡片在轉動時反光),轉到 180 度露出正面 */
 .flip-stage {
-  height: 8.2dvh;
+  height: 15dvh;
   width: auto;
   aspect-ratio: 400 / 560;
   display: block;
@@ -777,7 +820,7 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
    由 app.js 的 SLOT_SYM / FRAME_DECO(內嵌 SVG)提供圖層,這裡只負責排版與明暗。 */
 .slot-empty-card {
   position: relative;
-  height: 8.2dvh;
+  height: 15dvh;
   width: auto;
   aspect-ratio: 400 / 560;
   border-radius: 7px;
@@ -827,7 +870,7 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
 }
 /* 牌庫在設計圖是「一疊」卡(側邊露出好幾層紙邊),用多層位移陰影模擬,不需要多畫 DOM */
 .pile-back {
-  height: 5dvh;
+  height: 6.2dvh;
   width: auto;
   aspect-ratio: 400 / 560;
   border-radius: 5px;
@@ -856,7 +899,7 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   bottom: 14px;
 }
 /* 對手的牌庫/手牌張數只是參考資訊,縮小一點省空間 */
-#oppBand .pile-back { height: 3.4dvh; }
+#oppBand .pile-back { height: 4.2dvh; }
 #oppBand .pile-tile-label { font-size: 7.5px; }
 #oppBand .chip { padding: 2px 6px; min-width: 34px; }
 #oppBand .chip-label { font-size: 8.5px; }
