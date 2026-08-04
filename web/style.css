@@ -145,6 +145,28 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   letter-spacing: 1px;
   text-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
+/* 雙人對戰的 60 秒倒數,只在等你決策時出現;剩 10 秒轉紅並開始閃 */
+.turn-timer {
+  font-size: 12.5px;
+  font-weight: bold;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(10, 18, 34, 0.7);
+  border: 1px solid rgba(159,180,216,0.5);
+  color: #cfdbf0;
+  letter-spacing: 0.5px;
+}
+.turn-timer.urgent {
+  color: #ffd0d0;
+  border-color: rgba(230, 90, 90, 0.85);
+  background: rgba(70, 16, 16, 0.7);
+  animation: turnTimerPulse 0.9s ease-in-out infinite;
+}
+@keyframes turnTimerPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(230,90,90,0.5); }
+  50% { transform: scale(1.07); box-shadow: 0 0 10px 2px rgba(230,90,90,0.55); }
+}
+
 /* icon 鈕:正圓、只放一個符號,不佔橫向空間 */
 #topBar .icon-btn {
   width: 26px;
@@ -282,13 +304,13 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
 .opp-name {
   flex: 0 1 auto;
   min-width: 0;
-  font-size: 11px;
+  font-size: 12.5px;
   margin-bottom: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-#oppBand .opp-hand-icons .pile-back { height: 3.2dvh; }
+#oppBand .opp-hand-icons .pile-back { height: 3.9dvh; }
 /* 這兩個圖示只需要看到張數,標籤純粹給動畫程式定位用,視覺上藏起來省空間 */
 .opp-hand-icons .pile-tile-label {
   position: absolute;
@@ -304,21 +326,21 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   font-size: 8.5px;
   padding: 0 3px;
 }
+/* 平均分佈,不要用 margin-right:auto 把東西擠成「左一群、右一群」中間開天窗 */
 .opp-row {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 5px;
+  justify-content: space-between;
+  gap: 6px;
 }
-/* 星星剩量吃掉中間剩餘空間,把牌庫/棄牌推到右邊,左邊留給手牌圖示與名字 */
-.opp-row .opp-stars { margin-right: auto; }
-#oppBand .chip { padding: 2px 5px; min-width: 34px; }
+#oppBand .chip { padding: 3px 7px; min-width: 40px; font-size: 11px; }
+#oppBand .chip-count { font-size: 12.5px; }
 /* 對手星星剩量:一排極小的手勢圖示 + 數字,不畫卡格,省空間又不會因超過 3 張而失真 */
 .opp-stars {
   display: flex;
-  gap: 7px;
+  gap: 10px;
   align-items: center;
-  padding: 2px 7px;
+  padding: 3px 10px;
   border: 1px solid var(--line);
   border-radius: 7px;
   background: linear-gradient(180deg, rgba(6,10,20,0.45), rgba(6,10,20,0.15));
@@ -326,14 +348,14 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
 }
 .opp-star { display: flex; align-items: center; gap: 2px; }
 .opp-star-ico {
-  width: 13px;
-  height: 13px;
+  width: 17px;
+  height: 17px;
   background-repeat: no-repeat;
   background-position: center;
   background-size: contain;
   opacity: 0.85;
 }
-.opp-star-n { font-size: 11.5px; font-weight: bold; color: #cfdbf0; }
+.opp-star-n { font-size: 13.5px; font-weight: bold; color: #cfdbf0; }
 /* 該型別打光:圖示與數字一起壓暗,一眼看出對手這型別沒牌了 */
 .opp-star.depleted .opp-star-ico { opacity: 0.28; }
 .opp-star.depleted .opp-star-n { color: #5d6b85; }
@@ -542,13 +564,17 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   height: 100%;
   transform-style: preserve-3d;
 }
-.flip-inner.flip-run { animation: starFlipTurn 0.68s cubic-bezier(.34,1.1,.64,1) forwards; }
+/* 翻牌刻意放慢(0.68s → 1.05s):揭示是整局最重要的一刻,太快就沒有戲。
+   前段先微微抬起、蓄一下力,轉到 90 度時反光一下,再轉完露出正面。 */
+.flip-inner.flip-run { animation: starFlipTurn 1.05s cubic-bezier(.4,.05,.35,1) forwards; }
 @keyframes starFlipTurn {
-  0% { transform: rotateY(0deg); filter: brightness(1); }
-  47% { filter: brightness(1); }
-  50% { transform: rotateY(90deg); filter: brightness(2.6); }
-  53% { filter: brightness(1); }
-  100% { transform: rotateY(180deg); filter: brightness(1); }
+  0% { transform: rotateY(0deg) scale(1); filter: brightness(1); }
+  18% { transform: rotateY(-12deg) scale(1.05); filter: brightness(1.1); }
+  47% { filter: brightness(1.15); }
+  50% { transform: rotateY(90deg) scale(1.08); filter: brightness(2.6); }
+  53% { filter: brightness(1.15); }
+  82% { transform: rotateY(170deg) scale(1.04); }
+  100% { transform: rotateY(180deg) scale(1); filter: brightness(1); }
 }
 .flip-face {
   position: absolute;
@@ -562,13 +588,16 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
 }
 .flip-face.flip-front { transform: rotateY(180deg); }
 
-/* 太陽發動:金色炫光(對齊設計圖的金色太陽 symbol,不再是橘紅) */
+/* 太陽發動:金色炫光(對齊設計圖的金色太陽 symbol,不再是橘紅)。
+   太陽卡依規則是當下直接打出、沒有蓋牌階段,所以不做翻牌,改成把蓄力→爆發拉長,
+   讓它跟星星揭示一樣有「慢慢來」的重量感(0.55s → 0.9s)。 */
 @keyframes sunPowerUp {
-  0% { filter: brightness(1) saturate(1); box-shadow: 0 2px 5px rgba(0,0,0,0.4); }
-  40% { filter: brightness(1.6) saturate(1.35); box-shadow: 0 0 22px 7px rgba(232, 178, 58, 0.9); transform: scale(1.14); }
+  0% { filter: brightness(1) saturate(1); box-shadow: 0 2px 5px rgba(0,0,0,0.4); transform: scale(1); }
+  30% { filter: brightness(1.2) saturate(1.1); transform: scale(1.05); }
+  55% { filter: brightness(1.7) saturate(1.4); box-shadow: 0 0 26px 9px rgba(232, 178, 58, 0.92); transform: scale(1.16); }
   100% { filter: brightness(1) saturate(1); box-shadow: 0 2px 5px rgba(0,0,0,0.4); transform: scale(1); }
 }
-.slot-card-img.fx-sun { animation: sunPowerUp 0.55s ease-out; }
+.slot-card-img.fx-sun { animation: sunPowerUp 0.9s ease-out; }
 
 /* 月亮發動:冷藍月光(對齊設計圖的藍色月牙 symbol,不再是紫色),
    不用 hue-rotate 以免把卡圖本身的色相扭掉,改用亮度 + 藍色光暈 */
@@ -841,6 +870,21 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   border-color: rgba(217,169,74,0.55);
   box-shadow: inset 0 0 12px rgba(217,169,74,0.10), 0 2px 6px rgba(0,0,0,0.45);
 }
+/* 自己蓋著的牌:牌面朝下不洩漏給對手,但要提醒自己蓋的是哪一張,
+   否則太陽/月亮階段沒辦法判斷。只出現在自己這一側。 */
+.slot-memo {
+  margin-top: 2px;
+  font-size: 9.5px;
+  font-weight: bold;
+  color: var(--gold);
+  background: rgba(8, 14, 26, 0.75);
+  border: 1px solid rgba(217,169,74,0.4);
+  border-radius: 4px;
+  padding: 0 4px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 .slot-sym,
 .slot-deco {
   position: absolute;
@@ -903,10 +947,10 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   bottom: 14px;
 }
 /* 對手的牌庫/手牌張數只是參考資訊,縮小一點省空間 */
-#oppBand .pile-back { height: 4.2dvh; }
-#oppBand .pile-tile-label { font-size: 7.5px; }
-#oppBand .chip { padding: 2px 6px; min-width: 34px; }
-#oppBand .chip-label { font-size: 8.5px; }
+/* 對手區整體放大一級:原本壓得太小,牌庫張數與棄牌都不好辨識 */
+#oppBand .pile-back { height: 5.4dvh; }
+#oppBand .pile-tile-label { font-size: 9px; }
+#oppBand .chip-label { font-size: 9.5px; }
 
 .overlay {
   position: fixed;

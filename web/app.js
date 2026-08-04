@@ -392,6 +392,25 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// 揭示的節奏:翻牌前先停一拍(讓玩家意識到要開牌了),兩張牌之間再錯開一點,
+// 一張一張翻比兩張同時翻更有戲。翻牌動畫本身的長度在 style.css 的 starFlipTurn。
+const REVEAL_BEAT_MS = 420;
+const REVEAL_GAP_MS = 380;
+const MOON_FLIP_MS = 1050; // 要跟 style.css 的 starFlipTurn 動畫長度一致
+
+// 揭示期間「還不可以畫成正面」的截止時間(各側分開,因為是一前一後翻)。
+// 做在 render 層而不是事後改 DOM:揭示中隨時可能因為 log 更新而重繪,
+// 只靠事後把 img 換成背面的話,下一次重繪就會直接把牌面畫出來、破壞揭示。
+const revealHoldUntil = { opp: 0, mine: 0 };
+
+function holdRevealFor(side, ms) {
+  revealHoldUntil[side] = Date.now() + ms;
+}
+
+function isRevealHeld(side) {
+  return Date.now() < revealHoldUntil[side];
+}
+
 // 每行 log 之後都停一下讓畫面有時間播動畫,關鍵劇情點(開場硬幣、翻牌、出招、發動、抽牌、分出勝負)停久一點
 function delayForLogLine(text) {
   if (/^\n===== 第 1 回合 =====/.test(text)) return 1900; // 等開場硬幣動畫播完
@@ -399,9 +418,11 @@ function delayForLogLine(text) {
   if (/^★ .+ 贏得本回合!$/.test(text) || /^平手!/.test(text)) extra = 550;
   else if (/取走 .+ 的一張『.+』星星卡。/.test(text)) extra = 600; // 星星被吸走的動畫要多留一點時間
   else if (/ 蓋下星星卡。$/.test(text)) extra = 950; // 電腦先攻蓋星星卡:橫幅 + 蓋牌動畫要多留時間播完
-  else if (/揭示星星:/.test(text)) extra = 200;
-  else if (/打出太陽卡:/.test(text) || /打出【烈陽】!$/.test(text)) extra = 500; // 對手出牌會有飛入動畫,留多一點時間播完
-  else if (/發動【.+】/.test(text)) extra = 500;
+  // 揭示改成「停一拍 → 先攻翻 → 後攻翻」,加上翻牌動畫本身放慢到 1.05s,
+  // 這裡要留夠時間讓整段演完,不然會被下一行 log 切斷
+  else if (/揭示星星:/.test(text)) extra = 950;
+  else if (/打出太陽卡:/.test(text) || /打出【烈陽】!$/.test(text)) extra = 700; // 對手出牌有飛入動畫 + 放慢後的發光
+  else if (/發動【.+】/.test(text)) extra = 1500; // 月亮卡改成原地翻開再亮特效,要更久
   else if (/(抽牌|抽了一張牌)。$/.test(text)) extra = 1050; // 抽牌儀式(放大置中→飛進手牌)要多留時間播完
   return 150 + extra;
 }
@@ -652,7 +673,22 @@ function findStarCellImg(bandEl, starType) {
 // 星星揭示:把已經畫好正面的 img 換成一個雙面翻牌結構(牌背/牌面各佔一面),
 // 翻牌瞬間才把正面轉過來給玩家看,比單純的縮放進場更接近真的把蓋著的牌翻開
 function playStarFlip(col) {
-  const wrap = col.querySelector('[data-slot-kind="star"]');
+  playRevealFlip(col, "star");
+}
+
+// 把某格「已經畫成正面」的牌先蓋回背面,真正的牌面記在 data-face-src 上,
+// 等 playRevealFlip 翻牌時再拿出來當正面。這樣揭示前玩家絕對看不到牌面。
+function holdFaceDown(col, kind) {
+  const img = col && col.querySelector(`[data-slot-kind="${kind}"] .slot-card-img`);
+  if (!img) return;
+  if (img.alt === "?") return; // 本來就是背面(例如對手還沒揭示),不用動
+  img.dataset.faceSrc = img.src;
+  img.src = cardImgSrc(`back_${kind}`);
+}
+
+// 把已經畫好正面的 img 換成雙面翻牌結構,原地翻開。star/moon 共用同一套演出。
+function playRevealFlip(col, kind) {
+  const wrap = col.querySelector(`[data-slot-kind="${kind}"]`);
   const img = wrap && wrap.querySelector(".slot-card-img");
   if (!wrap || !img) return;
   const stage = document.createElement("div");
@@ -661,11 +697,12 @@ function playStarFlip(col) {
   inner.className = "flip-inner";
   const back = document.createElement("img");
   back.className = "flip-face flip-back";
-  back.src = cardImgSrc("back_star");
+  back.src = cardImgSrc(`back_${kind}`);
   back.draggable = false;
   const front = document.createElement("img");
   front.className = "flip-face flip-front";
-  front.src = img.src;
+  // holdFaceDown 可能已經把牌面暫時換成背面了,真正的牌面存在 data-face-src
+  front.src = img.dataset.faceSrc || img.src;
   front.alt = img.alt;
   front.draggable = false;
   inner.appendChild(back);
@@ -735,10 +772,28 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
     }
   }
 
-  // 1) 雙方星星同時翻牌
+  // 1) 星星揭示:這是整局最重要的一刻,所以不是「瞬間兩張一起翻完」,而是
+  //    先停一拍讓玩家意識到要開牌了,再依先攻→後攻的順序一張一張慢慢翻開。
   if (!prevPub.starsRevealed && pub.starsRevealed) {
-    playStarFlip(oppCol);
-    playStarFlip(mineCol);
+    const oppIsFirstReveal = (oppKey === "p1") === pub.firstIsP1;
+    const firstCol = oppIsFirstReveal ? oppCol : mineCol;
+    const secondCol = oppIsFirstReveal ? mineCol : oppCol;
+    // 翻牌要等一拍才開始,這段時間內畫面必須維持背面,否則會先讓玩家看光牌面。
+    // 交給 render 層的 revealHoldUntil 控制,中途重繪也不會提前爆牌面。
+    const firstSide = oppIsFirstReveal ? "opp" : "mine";
+    const secondSide = oppIsFirstReveal ? "mine" : "opp";
+    holdRevealFor(firstSide, REVEAL_BEAT_MS);
+    holdRevealFor(secondSide, REVEAL_BEAT_MS + REVEAL_GAP_MS);
+    holdFaceDown(firstCol, "star");
+    holdFaceDown(secondCol, "star");
+    // 翻牌時重新抓一次欄位:中途可能已經重繪過,先前抓到的節點會變成孤兒
+    const flipSide = (side) => {
+      const cols = $("battlefield").querySelectorAll(":scope > .bf-col");
+      const col = side === "opp" ? cols[0] : cols[1];
+      if (col) playStarFlip(col);
+    };
+    setTimeout(() => flipSide(firstSide), REVEAL_BEAT_MS);
+    setTimeout(() => flipSide(secondSide), REVEAL_BEAT_MS + REVEAL_GAP_MS);
   }
 
   // 2) 太陽卡出牌/強化(牌一出現在太陽欄位就播,型別不符後續結算時會直接丟棄)
@@ -756,16 +811,23 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
     }
   });
 
-  // 3) 月亮卡發動特效
-  [[oppKey, oppCol, true], [mineKey, mineCol, false]].forEach(([key, col, isOpp]) => {
+  // 3) 月亮卡發動:牌本來就蓋在場上,所以是「原地翻開」再亮特效,不是憑空出現。
+  //    跟星星一樣先停一拍再翻,翻完才炸特效。
+  [[oppKey, oppCol], [mineKey, mineCol]].forEach(([key, col]) => {
     const prevMoon = (prevPub[key] || {}).playedMoon;
     const nowMoon = (pub[key] || {}).playedMoon;
     if (!prevMoon && nowMoon) {
-      const target = moonImg(col);
-      // 【日蝕】是月亮卡裡的反制特效卡,額外炸一圈紫色衝擊波,跟普通月亮發動區隔開來
-      const burst = nowMoon === "日蝕" ? () => spawnShockwave(target, "moon") : null;
-      if (isOpp) flyCardIn(bandPileTileImg($("oppBand"), "月亮手牌"), target, nowMoon, () => { fx(target, "fx-moon"); if (burst) burst(); });
-      else { fx(target, "fx-moon"); if (burst) burst(); }
+      // 同星星:先把已經畫出來的牌面壓回背面,牌面留給翻牌動畫揭曉
+      holdFaceDown(col, "moon");
+      setTimeout(() => {
+        playRevealFlip(col, "moon");
+        setTimeout(() => {
+          const target = moonImg(col) || col.querySelector('[data-slot-kind="moon"] .flip-front');
+          fx(target, "fx-moon");
+          // 【日蝕】是月亮卡裡的反制特效卡,額外炸一圈衝擊波,跟普通月亮發動區隔開來
+          if (nowMoon === "日蝕") spawnShockwave(target, "moon");
+        }, MOON_FLIP_MS);
+      }, REVEAL_BEAT_MS);
     }
   });
 
@@ -1144,6 +1206,7 @@ function resolvePendingAsk(value) {
   // 抽牌彈窗要立刻收起,不能等下一次 render:引擎接手後可能還要跑一段 await,
   // 這段時間內滿版遮罩會一直蓋著畫面,玩家會覺得點了沒反應。
   $("drawPickOverlay").classList.add("hidden");
+  stopTurnTimer(); // 已經做出選擇,倒數立刻停掉,不要繼續在畫面上跳
   resolve(value);
 }
 
@@ -1400,32 +1463,51 @@ function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
 
   slots.push(slotEl("太陽", snapshot.playedSun && snapshot.playedSun.length ? snapshot.playedSun.join("、") : null, "sun", false, null, !isOpp ? "sun" : null));
 
+  // 揭示是這個遊戲最重要的一刻,所以雙方蓋下的星星卡在揭示前「都」顯示背面
+  // (包含自己蓋的),等雙方都準備好才一起翻開,翻牌的戲才做得出來。
   let starContent = null, starBack = false;
-  if (isOpp) {
-    if (starsRevealed) {
-      starContent = snapshot.star || null;
-    } else if (snapshot.starCommitted) {
-      // 對手自己真的已經蓋牌了才顯示「蓋著」,這個旗標只公開是非值、不洩漏蓋了什麼,
-      // 讓畫面能正確反映先攻/後攻順序(先攻方會先出現蓋著的星星卡)
-      starContent = "?";
-      starBack = true;
-    }
-  } else {
-    // 自己的星星就算還沒公開,也可以透過私密資料立刻看到自己蓋了什麼
-    starContent = snapshot.star || (privateData && privateData.committedStar) || null;
+  const myCommitted = !isOpp ? (privateData && privateData.committedStar) || null : null;
+  const side = isOpp ? "opp" : "mine";
+  // 揭示了但這一側的翻牌動畫還沒開始 → 繼續畫背面,牌面留給翻牌動畫揭曉
+  if (starsRevealed && isRevealHeld(side)) {
+    starContent = "?";
+    starBack = true;
+  } else if (starsRevealed) {
+    starContent = (isOpp ? snapshot.star : snapshot.star || myCommitted) || null;
+  } else if (isOpp ? snapshot.starCommitted : !!myCommitted) {
+    // starCommitted 只公開是非值、不洩漏蓋了什麼,讓畫面能正確反映先攻/後攻順序
+    starContent = "?";
+    starBack = true;
   }
-  slots.push(slotEl("星星", starContent, "star", starBack, null, !isOpp ? "star" : null));
+  const starSlot = slotEl("星星", starContent, "star", starBack, null, !isOpp ? "star" : null);
+  // 自己的牌雖然蓋著,但太陽/月亮階段還要靠它決策,所以在自己這側標一行小字提示蓋了什麼
+  if (starBack && !isOpp && myCommitted) {
+    const memo = document.createElement("div");
+    memo.className = "slot-memo";
+    memo.textContent = myCommitted;
+    starSlot.appendChild(memo);
+  }
+  slots.push(starSlot);
 
+  // 月亮卡同理:蓋下去時雙方都只看到背面,等到「發動」才翻開。
   let moonContent = null, moonBack = false, moonTap = null;
+  const myPendingMoon = !isOpp && privateData ? privateData.pendingMoonCard || null : null;
   if (snapshot.playedMoon) {
     moonContent = snapshot.playedMoon;
-  } else if (isOpp) {
-    if (snapshot.moonPending) { moonContent = "?"; moonBack = true; }
-  } else if (privateData && privateData.pendingMoonCard) {
-    moonContent = privateData.pendingMoonCard;
+  } else if (isOpp ? snapshot.moonPending : !!myPendingMoon) {
+    moonContent = "?";
+    moonBack = true;
     if (moonActivateAsk) moonTap = () => resolvePendingAsk(true);
   }
-  slots.push(slotEl("月亮", moonContent, "moon", moonBack, moonTap, !isOpp ? "moon" : null, true));
+  const moonSlot = slotEl("月亮", moonContent, "moon", moonBack, moonTap, !isOpp ? "moon" : null, true);
+  // 自己蓋的月亮卡蓋著,但要決定發不發動,所以同樣標一行小字提示是哪張
+  if (moonBack && !isOpp && myPendingMoon) {
+    const memo = document.createElement("div");
+    memo.className = "slot-memo";
+    memo.textContent = myPendingMoon;
+    moonSlot.appendChild(memo);
+  }
+  slots.push(moonSlot);
 
   if (isOpp) slots.reverse();
   slots.forEach((s) => row.appendChild(s));
@@ -1452,11 +1534,22 @@ function slotEl(header, content, kind, back, onTap, dropKind, value) {
   wrap.appendChild(h);
 
   if (back) {
+    // 蓋著的牌也可能需要互動(例如自己蓋的月亮卡要能點下去發動),
+    // 所以有 onTap 時照樣綁上互動,只是長按不給看內容(牌是蓋著的)
     const img = document.createElement("img");
-    img.className = "slot-card-img";
+    img.className = "slot-card-img" + (onTap ? " selectable" : "");
     img.src = cardImgSrc(`back_${kind}`);
     img.alt = "?";
     img.draggable = false;
+    if (onTap) {
+      attachInteractiveCard(img, {
+        cardName: null,
+        onConfirm: onTap,
+        onArm: () => armValue(value),
+        draggable: false,
+        ariaLabel: "發動蓋著的卡",
+      });
+    }
     wrap.appendChild(img);
     return wrap;
   }
@@ -1515,10 +1608,79 @@ function showGameOver(winnerRole, pub) {
 
 const CARD_PICK_KINDS = ["star", "sun", "moonCommit", "moonActivate", "drawPile"];
 
+// ── 雙人對戰的 60 秒出牌限時 ──────────────────────────────────────
+// 只在連線對戰生效(單人對 AI 不限時,自己慢慢想沒差)。時間到就自動幫你選一個
+// 「最不傷」的選項:有「不打/略過」就略過,沒有的話(星星、抽牌是強制的)選第一個。
+const TURN_LIMIT_MS = 60000;
+let turnTimerId = null;
+let turnTickId = null;
+
+function isOnlineMatch() {
+  return !!roomCode;
+}
+
+function defaultChoiceFor(options) {
+  const list = options || [];
+  const skip = list.find((o) => o.value === null || o.value === undefined || o.value === false);
+  if (skip) return skip.value === undefined ? null : skip.value;
+  return list.length ? list[0].value : null;
+}
+
+function stopTurnTimer() {
+  if (turnTimerId) { clearTimeout(turnTimerId); turnTimerId = null; }
+  if (turnTickId) { clearInterval(turnTickId); turnTickId = null; }
+  const el = $("turnTimer");
+  if (el) el.classList.add("hidden");
+}
+
+function startTurnTimer(onTimeout) {
+  stopTurnTimer();
+  const el = $("turnTimer");
+  const deadline = Date.now() + TURN_LIMIT_MS;
+  const paint = () => {
+    const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    el.textContent = `⏱ ${left}`;
+    el.classList.toggle("urgent", left <= 10);
+  };
+  el.classList.remove("hidden");
+  paint();
+  turnTickId = setInterval(paint, 250);
+  turnTimerId = setTimeout(onTimeout, TURN_LIMIT_MS);
+}
+
+// 把一個「等玩家決策」的 promise 包上限時:時間到就收掉畫面上的提示、改用預設值往下走
+function withTurnLimit(inner, options) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (v) => {
+      if (settled) return;
+      settled = true;
+      stopTurnTimer();
+      resolve(v);
+    };
+    inner.then(finish);
+    startTurnTimer(() => {
+      const fallback = defaultChoiceFor(options);
+      // 收掉還開著的決策 UI,否則遮罩/提示會卡在畫面上
+      pendingAsk = null;
+      resetArmed();
+      $("drawPickOverlay").classList.add("hidden");
+      $("modalOverlay").classList.add("hidden");
+      gameLog.push(`(逾時 ${TURN_LIMIT_MS / 1000} 秒,自動選擇)`);
+      if (lastPublicSeen) renderPublic(lastPublicSeen);
+      finish(fallback);
+    });
+  });
+}
+
 function showLocalModal(title, prompt, options, kind) {
-  if (CARD_PICK_KINDS.includes(kind)) {
-    return showCardPickUI(title, prompt, options, kind);
-  }
+  const inner = CARD_PICK_KINDS.includes(kind)
+    ? showCardPickUI(title, prompt, options, kind)
+    : showTextModal(title, prompt, options);
+  return isOnlineMatch() ? withTurnLimit(inner, options) : inner;
+}
+
+function showTextModal(title, prompt, options) {
   return new Promise((resolve) => {
     $("modalTitle").textContent = title;
     $("modalPrompt").textContent = prompt;

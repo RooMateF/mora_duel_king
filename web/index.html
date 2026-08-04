@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>猜☆拳☆王</title>
-<link rel="stylesheet" href="style.css?v=26">
+<link rel="stylesheet" href="style.css?v=27">
 </head>
 <body>
 
@@ -47,6 +47,8 @@
   <!-- 頂部壓到最薄:回合用「⟳ 數字」,紀錄/規則只留 icon,把畫面高度讓給戰場 -->
   <div id="topBar">
     <span id="statusText" class="round-chip"></span>
+    <!-- 雙人對戰限時 60 秒出牌,只在等你決策時出現 -->
+    <span id="turnTimer" class="turn-timer hidden"></span>
     <div class="topbar-btns">
       <button id="logToggleBtn" class="icon-btn" title="對戰紀錄" aria-label="對戰紀錄">☰</button>
       <button id="rulesBtn" class="icon-btn" title="規則說明(含操作方式)" aria-label="規則說明">?</button>
@@ -121,9 +123,9 @@
 <script src="firebase-config.js"></script>
 <!-- ?v= 是手動版本號,每次改動 rules.js/engine.js/net.js/app.js/style.css 就要遞增,
      避免玩家瀏覽器快取到部署前的舊版程式碼、看不到最新的修正 -->
-<script src="rules.js?v=26"></script>
-<script src="engine.js?v=26"></script>
-<script src="net.js?v=26"></script>
-<script src="app.js?v=26"></script>
+<script src="rules.js?v=27"></script>
+<script src="engine.js?v=27"></script>
+<script src="net.js?v=27"></script>
+<script src="app.js?v=27"></script>
 </body>
 </html>
