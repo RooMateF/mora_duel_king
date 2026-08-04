@@ -66,6 +66,12 @@ async function init() {
     $("lobbyMsg").textContent = "Firebase 尚未設定好,請先完成 README 的設定步驟。(" + e.message + ")";
     return;
   }
+  // 順手清掉超過一天的房間(打到一半被放生、沒能走到正常刪除流程的那些)。
+  // 不 await:清理失敗或很慢都不該卡住玩家進大廳。
+  Net.sweepStaleRooms()
+    .then((r) => { if (r.removed) console.info(`已清理 ${r.removed} 個超過一天的房間`); })
+    .catch((e) => console.warn("清理舊房間失敗(檢查 database.rules.json 是否已部署):", e.message));
+
   $("createBtn").onclick = onCreate;
   $("joinBtn").onclick = onJoin;
   document.querySelectorAll(".diffBtn").forEach((btn) => {
@@ -155,6 +161,10 @@ function startHostGame(hostName, guestName, guestUid) {
   // 對局開始後就取消自動刪除:對戰中短暫斷線很常見,不能因為一次網路抖動
   // 就把進行中的對局整個刪掉。改由結束時主動刪。
   Net.cancelRoomAutoDelete(roomCode).catch(() => { /* 沒掛成功過就不用取消 */ });
+  // 同時登記到索引,萬一這局打到一半就被雙方放生,隔天會被清掉
+  Net.indexRoom(roomCode).catch((e) => {
+    console.warn("無法登記房間索引(檢查 database.rules.json 是否已部署):", e.message);
+  });
   const ui = makeUi(guestUid);
   game = new Game(ui, hostName, guestName);
   // 房主自己畫面用的即時重畫:直接從 game 現況組快照,不用等 Firebase 一來一回,

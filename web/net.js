@@ -139,8 +139,38 @@ const Net = (() => {
     return db.ref(`rooms/${code}`).onDisconnect().cancel();
   }
 
-  function deleteRoom(code) {
-    return db.ref(`rooms/${code}`).remove();
+  async function deleteRoom(code) {
+    await db.ref(`rooms/${code}`).remove();
+    await db.ref(`roomIndex/${code}`).remove().catch(() => { /* 沒建索引就算了 */ });
+  }
+
+  // ── 超過一天的房間定期清掉 ────────────────────────────────
+  // 要清就得先知道有哪些房間,但「開放讀取 rooms 根節點」不可行:Firebase 規則是
+  // 往下放寬的,那樣會連 rooms/$code/private 一起開放,對手就能讀到你蓋的星星卡。
+  // 所以另外開一個只存「房間代碼 → 開始時間」的索引節點,不含任何牌面資訊。
+  // 索引只在對局真正開始後才寫入 —— 等待中的房間本來就由 onDisconnect 負責,
+  // 也就不會被列進索引,避免有人掃索引去搶進別人還在等人的房間。
+  const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
+
+  function indexRoom(code) {
+    return db.ref(`roomIndex/${code}`).set(firebase.database.ServerValue.TIMESTAMP);
+  }
+
+  async function sweepStaleRooms(maxDeletes = 20) {
+    const snap = await db.ref("roomIndex").get();
+    const all = snap.val() || {};
+    const cutoff = Date.now() - ROOM_TTL_MS;
+    const stale = Object.keys(all)
+      .filter((code) => typeof all[code] === "number" && all[code] <= cutoff)
+      .slice(0, maxDeletes); // 一次不要清太多,避免單次開啟頁面打太多請求
+    let removed = 0;
+    for (const code of stale) {
+      try {
+        await deleteRoom(code);
+        removed++;
+      } catch (_) { /* 沒權限或已被別人清掉,跳過就好 */ }
+    }
+    return { indexed: Object.keys(all).length, stale: stale.length, removed };
   }
 
   return {
@@ -148,6 +178,7 @@ const Net = (() => {
     publishPublic, publishPrivate, watchPrivate,
     sendRpcRequest, listenRpcRequest, sendRpcResponse, waitRpcResponse,
     armRoomAutoDelete, cancelRoomAutoDelete, deleteRoom,
+    indexRoom, sweepStaleRooms,
     myUid: myUidValue,
   };
 })();
