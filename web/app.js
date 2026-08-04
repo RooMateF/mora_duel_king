@@ -1067,12 +1067,15 @@ function handCardTile(name, kind, count, onTap, value, side) {
   const wrap = document.createElement("div");
   const isArmed = onTap && armedValue !== null && value !== undefined && armedValue === value;
   wrap.className = "hand-card-wrap" + (isArmed ? " armed" : "");
-  // 底座卡框(拳頭/手掌/剪刀)是「桌墊上印的凹槽」,平常被實際的星星卡壓住看不到,
-  // 只有這個型別全部打光(x0)時才露出來,代表這格空了。
+  // 星星庫存格一律顯示設計圖那種「卡框 + 手勢圖案」的底座(對手深色版、我方藍色版),
+  // 不顯示實際卡插畫:石頭的灰岩、布的白綢是偏亮的寫實插畫,跟深藍金的整體風格衝突。
+  // 插畫沒有消失 —— 長按任何一格都會跳出放大的實際卡圖與效果說明。
+  // 剩幾張用數字 badge 表示;打光(x0)時整格壓暗,一眼看得出這個型別沒牌了。
   const depleted = kind === "star" && count === 0;
-  const socketSrc = depleted ? (STAR_SOCKET_SRC[side === "opp" ? "opp" : "mine"] || {})[name] : null;
+  const socketSrc = kind === "star" ? (STAR_SOCKET_SRC[side === "opp" ? "opp" : "mine"] || {})[name] : null;
   const img = document.createElement("img");
-  img.className = `hand-card card-${kind}` + (onTap ? " selectable" : "") + (socketSrc ? " hand-card-socket" : "");
+  img.className = `hand-card card-${kind}` + (onTap ? " selectable" : "") +
+    (socketSrc ? " hand-card-socket" : "") + (depleted ? " socket-depleted" : "");
   img.src = socketSrc || cardImgSrc(name);
   img.alt = name;
   img.draggable = false;
