@@ -336,6 +336,7 @@ function renderPublic(pub) {
   renderBand($("oppBand"), pub[oppKey], true, null);
   renderBand($("myBand"), pub[mineKey], false, lastPrivateSeen);
   renderBattlefield(pub, oppKey, mineKey);
+  syncDrawPickOverlay();
   renderLog(pub.log || []);
   if (!prevPub && pub.round === 1) showCoinFlip(pub);
   triggerBattleEffects(prevPub, pub, oppKey, mineKey);
@@ -1137,7 +1138,51 @@ function resolvePendingAsk(value) {
   resetArmed();
   const resolve = pendingAsk.resolve;
   pendingAsk = null;
+  // 抽牌彈窗要立刻收起,不能等下一次 render:引擎接手後可能還要跑一段 await,
+  // 這段時間內滿版遮罩會一直蓋著畫面,玩家會覺得點了沒反應。
+  $("drawPickOverlay").classList.add("hidden");
   resolve(value);
+}
+
+// 抽牌二選一:牌庫縮圖擠在左右下角很小、很難精準點到,改成蓋滿畫面的兩張大牌。
+// 抽牌是強制的(引擎只在兩堆都還有牌時才問),所以這個彈窗沒有取消,一定要選一邊。
+function syncDrawPickOverlay() {
+  const ov = $("drawPickOverlay");
+  const ask = pendingAsk && pendingAsk.kind === "drawPile" ? pendingAsk : null;
+  if (!ask) {
+    ov.classList.add("hidden");
+    return;
+  }
+  $("drawPickTitle").textContent = ask.prompt || ask.title || "選擇要抽的牌堆";
+  const box = $("drawPickCards");
+  box.innerHTML = "";
+  ask.options.forEach((opt) => {
+    const kind = opt.value === "太陽" ? "sun" : "moon";
+    const back = cardImgSrc(`back_${kind}`);
+    const wrap = document.createElement("div");
+    wrap.className = `draw-pick-card draw-pick-${kind}`;
+    const img = document.createElement("img");
+    img.className = "draw-pick-img";
+    img.src = back;
+    img.alt = opt.label;
+    img.draggable = false;
+    // 往下滑 = 抽牌(跟牌庫縮圖同一套手勢);單純點一下也直接抽,
+    // 因為這裡是強制的二選一、沒有其他可按的東西,不需要再多一步確認鈕。
+    attachSwipeDraw(img, {
+      onArm: () => resolvePendingAsk(opt.value),
+      onConfirm: () => resolvePendingAsk(opt.value),
+      cardBackSrc: back,
+      ariaLabel: `抽${opt.value}牌`,
+      destEl: () => { const my = $("myBand"); return my ? my.querySelector(".hand") : null; },
+    });
+    wrap.appendChild(img);
+    const cap = document.createElement("div");
+    cap.className = "draw-pick-label";
+    cap.textContent = opt.label;
+    wrap.appendChild(cap);
+    box.appendChild(wrap);
+  });
+  ov.classList.remove("hidden");
 }
 
 function showCardPickUI(title, prompt, options, kind) {

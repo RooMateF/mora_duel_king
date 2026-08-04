@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>猜☆拳☆王</title>
-<link rel="stylesheet" href="style.css?v=24">
+<link rel="stylesheet" href="style.css?v=25">
 </head>
 <body>
 
@@ -71,6 +71,15 @@
   </div>
 </div>
 
+<!-- 抽牌二選一:牌庫縮圖在角落太小很難點,改成蓋滿畫面的兩張大牌,可直接往下滑抽牌 -->
+<div id="drawPickOverlay" class="overlay hidden">
+  <div class="draw-pick-box">
+    <div id="drawPickTitle" class="draw-pick-title"></div>
+    <div id="drawPickCards" class="draw-pick-cards"></div>
+    <div class="draw-pick-hint">往下滑動卡牌抽牌,或直接點選</div>
+  </div>
+</div>
+
 <div id="modalOverlay" class="overlay hidden">
   <div class="modal-box">
     <h3 id="modalTitle"></h3>
@@ -112,9 +121,9 @@
 <script src="firebase-config.js"></script>
 <!-- ?v= 是手動版本號,每次改動 rules.js/engine.js/net.js/app.js/style.css 就要遞增,
      避免玩家瀏覽器快取到部署前的舊版程式碼、看不到最新的修正 -->
-<script src="rules.js?v=24"></script>
-<script src="engine.js?v=24"></script>
-<script src="net.js?v=24"></script>
-<script src="app.js?v=24"></script>
+<script src="rules.js?v=25"></script>
+<script src="engine.js?v=25"></script>
+<script src="net.js?v=25"></script>
+<script src="app.js?v=25"></script>
 </body>
 </html>
