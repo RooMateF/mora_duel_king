@@ -57,6 +57,12 @@
 
 > 詳細技術細節(每個 bug 的根因、Pillow 踩過的坑)記在協作 session 的長期記憶裡,搜尋關鍵字「reference_rps_card_game_project」。
 
+### 2026-08-04 — cardgen.py 進版控 + 外部 AI 圖檔整合流程 + 規則修正
+- `tools/cardgen.py`:卡牌美術產生器正式進 repo(先前只存在協作 session 暫存區)。
+- 新增 `generate_from_external_art()` / `python cardgen.py --external`:讀 `tools/cardgen_source_art/` 裡跟卡名同名的外部圖檔(AI 生成或委託繪製),用 cover-fit 裁切塞進既有的金屬邊框/名條/圓標/效果文字框,取代程式內建插畫;找不到圖檔的卡自動退回內建插畫。`tools/cardgen_source_art/README.md` 附 11 張卡的統一風格錨點與個別 prompt。**目前資料夾還是空的,等使用者生完圖丟進去。**
+- **規則修正**:太陽升級卡(殞石頭/雷射剪刀/鈦合金布)型別不符時,原本實作是「收回手牌、下回合可再打」,跟 `RPS_Card_Game_Design.md` 原始設計(直接進棄牌區)不一致 —— 已修正為「視為發動無效並丟棄」,`engine.js`/`rps_core.py`/`rules.js`/`cardgen.py`/`CARD_EFFECTS.md` 同步。
+- **待辦**:`web/cards/殞石頭.png`/`雷射剪刀.png`/`鈦合金布.png` 這三張圖上的效果文字目前還是舊版(卡片圖片是程式產生時「烤」進去的靜態文字,不會自動跟著程式碼裡的文字更新)。因為這三張卡本來就排在「換成外部 AI 插畫」的名單裡,建議直接在下一輪外部插畫整合時一併帶新文字重新產生,不用現在單獨跑一次程式生成版重繪。
+
 ---
 
 ## 長期開發目標(路線圖)
