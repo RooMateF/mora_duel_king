@@ -739,7 +739,7 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
     playStarFlip(mineCol);
   }
 
-  // 2) 太陽卡出牌/強化(牌一出現在太陽欄位就播,型別不符後續會自己收回手牌)
+  // 2) 太陽卡出牌/強化(牌一出現在太陽欄位就播,型別不符後續結算時會直接丟棄)
   // 對手看不到手牌內容,額外從對手的太陽手牌堆疊「飛」一張進場,讓對手的動作更有實感
   [[oppKey, oppCol, true], [mineKey, mineCol, false]].forEach(([key, col, isOpp]) => {
     const prevArr = (prevPub[key] || {}).playedSun || [];

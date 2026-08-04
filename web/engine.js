@@ -545,11 +545,9 @@ class Game {
 
     for (const p of [pFirst, pSecond]) {
       for (const sc of p.playedSunCards) {
+        p.discard.push(sc);
         if (SUN_EVOLVE[sc] && SUN_EVOLVE[sc][0] !== p.committedStar) {
-          p.handSun.push(sc);
-          await this.ui.log(`${p.name} 的【${sc}】星星型別不符,升級失敗,收回手牌。`);
-        } else {
-          p.discard.push(sc);
+          await this.ui.log(`${p.name} 的【${sc}】星星型別不符,發動無效,直接丟棄。`);
         }
       }
     }
