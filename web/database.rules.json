@@ -1,10 +1,8 @@
 {
   "rules": {
     "rooms": {
-      "//": "刻意不在 rooms 這一層給 .read。Firebase 規則是往下放寬的,一旦這裡開放讀取,連底下的 private(雙方的手牌與蓋著的星星卡)都會一起開放,對手就能直接讀到你蓋了什麼。要列出房間清單請用 roomIndex。",
       "$roomCode": {
-        "//": "可以寫入(進而刪除)整個房間節點的條件:(1) 房間還不存在 —— 建房才寫得進去;(2) 自己是房主 —— 對局結束或等待中斷線時清掉自己的房間;(3) 這間房已經超過一天 —— 任何人都可以順手清掉,因為 Realtime Database 沒有 TTL,不清就會永遠累積。注意規則是往下放寬的:這條為 false 時不會擋掉下面各自的權限,所以加入者照樣能改 meta。",
-        ".write": "auth != null && (!data.exists() || data.child('meta/hostUid').val() === auth.uid || data.child('meta/createdAt').val() <= now - 86400000)",
+        ".write": "auth != null && (!data.exists() || data.child('meta/hostUid').val() === auth.uid || (data.child('meta/createdAt').isNumber() && data.child('meta/createdAt').val() <= now - 86400000))",
         "meta": {
           ".read": "auth != null",
           ".write": "auth != null"
@@ -33,7 +31,6 @@
       }
     },
     "roomIndex": {
-      "//": "只存「房間代碼 → 對局開始時間」,用來找出超過一天該清掉的房間。不含任何牌面或玩家資訊。只有真正開始的對局才會登記,等待中的房間交給 onDisconnect 處理,這樣掃索引也看不到還在等人的房間。",
       ".read": "auth != null",
       "$roomCode": {
         ".write": "auth != null",
