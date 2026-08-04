@@ -816,6 +816,8 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
 
 function renderBand(container, snapshot, isOpp, privateData) {
   container.innerHTML = "";
+  // 依設計圖分區上色:對手側(上)深色、我方側(下)藍色
+  container.dataset.side = isOpp ? "opp" : "mine";
   if (!snapshot) return;
 
   const nameEl = document.createElement("div");
@@ -836,7 +838,7 @@ function renderBand(container, snapshot, isOpp, privateData) {
     const selectable = !isOpp && askKind === "star" && pendingAsk.options.some((o) => o.value === t);
     const cell = document.createElement("div");
     cell.className = "panel-cell";
-    cell.appendChild(handCardTile(t, "star", snapshot.stars[t], selectable ? () => resolvePendingAsk(t) : null, t));
+    cell.appendChild(handCardTile(t, "star", snapshot.stars[t], selectable ? () => resolvePendingAsk(t) : null, t, isOpp ? "opp" : "mine"));
     grid.appendChild(cell);
   });
   const drawPickable = !isOpp && askKind === "drawPile";
@@ -933,18 +935,82 @@ function cardImgSrc(name) {
   return `cards/${encodeURIComponent(name)}.png?v=${CARD_ASSET_VERSION}`;
 }
 
-// 星星卡某型別打光了(x0)時,不再繼續顯示那張卡的實際卡圖,改顯示戰場介面設計圖裡
-// 那個拳頭/手掌/剪刀的「底座」圖示,呼應「這個型別的牌已經出完、只剩空底座」的概念
-const STAR_SOCKET_EMPTY_SRC = { "石頭": "img/socket_石頭.png", "布": "img/socket_布.png", "剪刀": "img/socket_剪刀.png" };
+// 星星型別的「底座」卡框(拳頭/手掌/剪刀),對應 battlefield_layout_slots_v2.png 的星星庫存列。
+// 依設計圖分區:對手側(上方)用深色底座、我方側(下方)用藍色底座。
+const STAR_SOCKET_SRC = {
+  opp:  { "石頭": "img/socket_石頭.png",      "布": "img/socket_布.png",      "剪刀": "img/socket_剪刀.png" },
+  mine: { "石頭": "img/socket_石頭_blue.png", "布": "img/socket_布_blue.png", "剪刀": "img/socket_剪刀_blue.png" },
+};
 
-function handCardTile(name, kind, count, onTap, value) {
+// ─── 天體卡框:對照 battlefield_layout_slots_v2.png 的空欄位,用向量 SVG 重現 ───
+// 太陽/星星/月亮各自的置中 symbol(浮水印),外圈同心橢圓、四邊菱形標記、邊角刻痕則統一由 frameDeco 疊上。
+// 用 SVG 而非點陣圖:解析度無關、可隨欄位大小縮放都保持銳利,且色彩集中在這裡好維護。
+const SYM_COLOR = { moon: "#7ea6dd", star: "#d3dcec", sun: "#e8b23a" };
+
+function _svgUri(inner, viewBox) {
+  return "data:image/svg+xml;utf8," + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + (viewBox || "0 0 100 100") + '">' + inner + "</svg>");
+}
+
+// 星形多邊形頂點(spikes 個尖角,rO/rI 為外/內半徑,rot 額外旋轉)
+function _starPts(cx, cy, spikes, rO, rI, rot) {
+  const pts = [];
+  const step = Math.PI / spikes;
+  for (let i = 0; i < spikes * 2; i++) {
+    const r = i % 2 ? rI : rO;
+    const a = i * step - Math.PI / 2 + (rot || 0);
+    pts.push((cx + r * Math.cos(a)).toFixed(1) + "," + (cy + r * Math.sin(a)).toFixed(1));
+  }
+  return pts.join(" ");
+}
+
+function _symInner(kind) {
+  const c = SYM_COLOR[kind];
+  if (kind === "moon") {
+    // 兩個圓做出彎月缺口(缺口朝右上,呼應設計圖的月牙)
+    return '<defs><mask id="mo"><rect width="100" height="100" fill="#fff"/>' +
+      '<circle cx="63" cy="40" r="33" fill="#000"/></mask></defs>' +
+      '<circle cx="50" cy="52" r="37" fill="' + c + '" mask="url(#mo)"/>';
+  }
+  if (kind === "star") {
+    // 羅盤玫瑰:主四芒(南北東西較長)+ 斜四芒(較短)交疊
+    return '<polygon points="' + _starPts(50, 50, 4, 46, 11, 0) + '" fill="' + c + '"/>' +
+      '<polygon points="' + _starPts(50, 50, 4, 30, 10, Math.PI / 4) + '" fill="' + c + '" opacity="0.85"/>';
+  }
+  // sun:放射光芒 + 實心圓心
+  return '<polygon points="' + _starPts(50, 50, 12, 45, 27, 0) + '" fill="' + c + '"/>' +
+    '<circle cx="50" cy="50" r="14" fill="' + c + '"/>';
+}
+
+const SLOT_SYM = { moon: _svgUri(_symInner("moon")), star: _svgUri(_symInner("star")), sun: _svgUri(_symInner("sun")) };
+
+// 卡框裝飾(同心橢圓導引線 + 四邊菱形 + 邊角刻痕),中性半透明色,深/藍兩種分區底色上都清楚。
+const FRAME_DECO = (() => {
+  const stroke = "rgba(206,218,240,0.34)";
+  const dia = (x, y) => '<rect x="' + (x - 3) + '" y="' + (y - 3) + '" width="6" height="6" fill="rgba(214,224,244,0.5)" transform="rotate(45 ' + x + ' ' + y + ')"/>';
+  const tick = (d) => '<path d="' + d + '" fill="none" stroke="rgba(214,224,244,0.45)" stroke-width="1.4"/>';
+  // 卡片比例 400/560,所以框裝飾用 100x140 的 viewBox,菱形/刻痕才不會被拉扁
+  return _svgUri(
+    '<ellipse cx="50" cy="70" rx="34" ry="48" fill="none" stroke="' + stroke + '" stroke-width="1"/>' +
+    '<ellipse cx="50" cy="70" rx="26" ry="37" fill="none" stroke="' + stroke + '" stroke-width="0.8"/>' +
+    dia(50, 16) + dia(50, 124) + dia(12, 70) + dia(88, 70) +
+    tick("M8 12 L8 20 M8 12 L16 12") + tick("M92 12 L92 20 M92 12 L84 12") +
+    tick("M8 128 L8 120 M8 128 L16 128") + tick("M92 128 L92 120 M92 128 L84 128"),
+    "0 0 100 140"
+  );
+})();
+
+function handCardTile(name, kind, count, onTap, value, side) {
   const wrap = document.createElement("div");
   const isArmed = onTap && armedValue !== null && value !== undefined && armedValue === value;
   wrap.className = "hand-card-wrap" + (isArmed ? " armed" : "");
-  const isEmptySocket = kind === "star" && count === 0 && STAR_SOCKET_EMPTY_SRC[name];
+  // 星星庫存列一律顯示設計圖的「底座」卡框(拳頭/手掌/剪刀),不再顯示實際卡圖:
+  // 底座本身就代表這個型別,剩幾張改用下方的 ◇ pips + 數字表示。打光(x0)時整格轉暗。
+  const socketSrc = kind === "star" ? (STAR_SOCKET_SRC[side === "opp" ? "opp" : "mine"] || {})[name] : null;
   const img = document.createElement("img");
-  img.className = `hand-card card-${kind}` + (onTap ? " selectable" : "") + (isEmptySocket ? " hand-card-socket-empty" : "");
-  img.src = isEmptySocket ? STAR_SOCKET_EMPTY_SRC[name] : cardImgSrc(name);
+  img.className = `hand-card card-${kind}` + (onTap ? " selectable" : "") +
+    (socketSrc ? " hand-card-socket" : "") + (socketSrc && count === 0 ? " socket-depleted" : "");
+  img.src = socketSrc || cardImgSrc(name);
   img.alt = name;
   img.draggable = false;
   attachInteractiveCard(img, {
@@ -957,6 +1023,18 @@ function handCardTile(name, kind, count, onTap, value) {
   });
   wrap.appendChild(img);
   if (count !== null && count !== undefined) {
+    // 設計圖的星星格底部有三顆菱形當存量指示。星星會因為對戰吸收而超過 3 張,
+    // pips 只畫到 3 顆會失真,所以數字 badge 一律保留,pips 純粹當視覺呼應。
+    if (socketSrc) {
+      const pips = document.createElement("div");
+      pips.className = "star-pips";
+      for (let i = 0; i < 3; i++) {
+        const p = document.createElement("span");
+        p.className = "star-pip" + (i < Math.min(count, 3) ? " on" : "");
+        pips.appendChild(p);
+      }
+      wrap.appendChild(pips);
+    }
     const badge = document.createElement("span");
     badge.className = "hand-card-count";
     badge.textContent = `x${count}`;
@@ -1198,6 +1276,8 @@ function renderBattlefield(pub, oppKey, mineKey) {
 function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
   const col = document.createElement("div");
   col.className = "bf-col";
+  // 依設計圖分區上色:對手側(上)深色、我方側(下)藍色
+  col.dataset.side = isOpp ? "opp" : "mine";
   if (!snapshot) return col;
 
   const label = document.createElement("div");
@@ -1214,7 +1294,11 @@ function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
   const row = document.createElement("div");
   row.className = "bf-row";
 
-  row.appendChild(slotEl("太陽", snapshot.playedSun && snapshot.playedSun.length ? snapshot.playedSun.join("、") : null, "sun", false, null, !isOpp ? "sun" : null));
+  // 設計圖的兩排戰場是鏡像對稱的:對手排是 月/星/日,我方排是 日/星/月,
+  // 星星永遠在正中間對撞。先照我方順序組好,對手排最後再反轉。
+  const slots = [];
+
+  slots.push(slotEl("太陽", snapshot.playedSun && snapshot.playedSun.length ? snapshot.playedSun.join("、") : null, "sun", false, null, !isOpp ? "sun" : null));
 
   let starContent = null, starBack = false;
   if (isOpp) {
@@ -1230,7 +1314,7 @@ function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
     // 自己的星星就算還沒公開,也可以透過私密資料立刻看到自己蓋了什麼
     starContent = snapshot.star || (privateData && privateData.committedStar) || null;
   }
-  row.appendChild(slotEl("星星", starContent, "star", starBack, null, !isOpp ? "star" : null));
+  slots.push(slotEl("星星", starContent, "star", starBack, null, !isOpp ? "star" : null));
 
   let moonContent = null, moonBack = false, moonTap = null;
   if (snapshot.playedMoon) {
@@ -1241,7 +1325,10 @@ function battlefieldColumn(snapshot, isOpp, starsRevealed, privateData) {
     moonContent = privateData.pendingMoonCard;
     if (moonActivateAsk) moonTap = () => resolvePendingAsk(true);
   }
-  row.appendChild(slotEl("月亮", moonContent, "moon", moonBack, moonTap, !isOpp ? "moon" : null, true));
+  slots.push(slotEl("月亮", moonContent, "moon", moonBack, moonTap, !isOpp ? "moon" : null, true));
+
+  if (isOpp) slots.reverse();
+  slots.forEach((s) => row.appendChild(s));
 
   col.appendChild(row);
 
@@ -1291,13 +1378,18 @@ function slotEl(header, content, kind, back, onTap, dropKind, value) {
     return wrap;
   }
 
-  // 空欄位改用該類型卡背的黯淡版本當佔位圖示(不是純文字「—」),
-  // 平常就先暗示這格是星星/太陽/月亮欄位,牌蓋上去後同一張圖直接轉亮
-  const empty = document.createElement("img");
+  // 空欄位畫成設計圖裡的「天體卡框」:卡框底 + 置中的太陽/星星/月亮 symbol 浮水印 +
+  // 同心橢圓/菱形/邊角刻痕裝飾。牌打上去後同一格會換成實際卡圖,卡框感一路延續。
+  const empty = document.createElement("div");
   empty.className = "slot-empty-card";
-  empty.src = cardImgSrc(`back_${kind}`);
-  empty.alt = "";
-  empty.draggable = false;
+  const sym = document.createElement("div");
+  sym.className = "slot-sym";
+  sym.style.backgroundImage = `url("${SLOT_SYM[kind]}")`;
+  empty.appendChild(sym);
+  const deco = document.createElement("div");
+  deco.className = "slot-deco";
+  deco.style.backgroundImage = `url("${FRAME_DECO}")`;
+  empty.appendChild(deco);
   wrap.appendChild(empty);
   return wrap;
 }

@@ -3,3 +3,5 @@ __pycache__/
 rps_game - 複製.py
 tools/cardgen_out/
 card_game_png/
+# 本機開發用的預覽伺服器設定(路徑依各人環境而異,不進版控)
+.claude/

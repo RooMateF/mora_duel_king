@@ -1,28 +1,33 @@
+/* 色票對照 battlefield_layout_slots_v2.png:整體是深藍夜空 + 霧藍我方區 + 金色點綴,
+   對手區壓得更暗(近黑藍)、我方區提亮成鋼藍,兩側一眼分得出來。 */
 :root {
-  --bg: #14151a;
-  --panel: #1e2029;
-  --band-a: #262a33;
-  --band-mid: #1b1d24;
-  --text: #eaeaea;
-  --text-dim: #8a8f99;
-  --star: #3b6ea5;
-  --sun: #c96b1f;
-  --moon: #6a3fa0;
-  --empty: #33363f;
-  --accent: #4b8f5e;
+  --bg: #0b1120;
+  --panel: #16203a;
+  /* 分區底色:opp=上方深色區、mine=下方藍色區 */
+  --side-opp: rgba(9, 13, 24, 0.82);
+  --side-mine: rgba(24, 49, 84, 0.72);
+  --band-mid: rgba(11, 18, 34, 0.55);
+  --text: #e7edf8;
+  --text-dim: #8fa0bd;
+  /* 天體主題色,與 app.js 的 SYM_COLOR 對應 */
+  --star: #9fb4d8;
+  --sun: #e8b23a;
+  --moon: #7ea6dd;
+  --gold: #d9a94a;
+  --line: rgba(206, 218, 240, 0.30);
+  --empty: #1a2338;
+  --accent: #d9a94a;
 }
 
 * { box-sizing: border-box; }
 
 html, body { height: 100%; }
 
+/* 底圖直接用設計稿的空版戰場(星空 + 光環 + 祥雲),版面元素再疊上去 */
 body {
   margin: 0;
   background:
-    radial-gradient(ellipse 60% 40% at 15% 0%, rgba(59,110,165,0.16), transparent 60%),
-    radial-gradient(ellipse 55% 35% at 100% 15%, rgba(201,107,31,0.14), transparent 60%),
-    radial-gradient(ellipse 60% 45% at 50% 100%, rgba(106,63,160,0.14), transparent 60%),
-    url("img/board_bg.jpg") center / cover no-repeat fixed,
+    url("img/board_base_v2.jpg") center / cover no-repeat fixed,
     var(--bg);
   color: var(--text);
   font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
@@ -80,10 +85,11 @@ h1 { margin-bottom: 0; }
 .diff-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
 .diff-buttons button { flex: 1; min-width: 60px; }
 
+/* 按鈕走設計圖的「深藍底 + 金邊」,不用金色實心底(金底配白字對比不足) */
 button {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 100%, white 22%), var(--accent) 60%, color-mix(in srgb, var(--accent) 100%, black 25%));
-  color: white;
-  border: 1px solid rgba(0,0,0,0.35);
+  background: linear-gradient(180deg, #2b4670, #1b2f52 60%, #142441);
+  color: #f0e3c4;
+  border: 1px solid rgba(217,169,74,0.55);
   border-radius: 8px;
   padding: 10px 16px;
   font-size: 14px;
@@ -155,22 +161,37 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   overflow-x: hidden;
 }
 
+/* 三個橫帶(對手資源 / 戰場 / 我方資源)。設計圖是靠底色深淺 + 一條細金線分隔,
+   不是各自獨立的圓角卡片,所以這裡只留很淡的邊框、圓角收小。 */
 .band {
-  background-color: var(--band-a);
-  background-image: url("img/board_texture.png");
-  background-repeat: repeat;
-  background-size: 96px 96px;
-  background-blend-mode: multiply;
   padding: 3px 8px;
   flex: 0 0 auto;
-  border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.06);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  position: relative;
+  box-shadow: inset 0 0 24px rgba(0,0,0,0.35);
 }
+.band[data-side="opp"] { background: var(--side-opp); }
+.band[data-side="mine"] { background: var(--side-mine); }
 .band.bf {
-  background-color: var(--band-mid);
-  border-color: rgba(255,211,92,0.18);
+  background: var(--band-mid);
+  border-color: rgba(217,169,74,0.30);
 }
+
+/* 分隔線中央的菱形接點,呼應設計圖每條分隔線正中間的小菱形 */
+.band.bf::before,
+.band.bf::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  background: rgba(217,169,74,0.55);
+  transform: translate(-50%, -50%) rotate(45deg);
+  pointer-events: none;
+}
+.band.bf::before { top: 0; }
+.band.bf::after { top: 100%; }
 
 .band-name {
   font-weight: bold;
@@ -178,7 +199,9 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   margin-bottom: 2px;
   display: inline-block;
   padding-bottom: 1px;
-  border-bottom: 2px solid rgba(255,211,92,0.5);
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid rgba(217,169,74,0.55);
+  color: #e9eefb;
 }
 
 .hand {
@@ -199,9 +222,9 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   color: white;
   min-width: 44px;
 }
-.chip-sun { background: var(--sun); }
-.chip-moon { background: var(--moon); }
-.chip-discard { background: #555a63; }
+.chip-sun { background: linear-gradient(180deg, #b98a2a, #8c6519); }
+.chip-moon { background: linear-gradient(180deg, #3f6899, #27466e); }
+.chip-discard { background: linear-gradient(180deg, #3b4760, #2a3448); }
 .chip-count { font-size: 12px; font-weight: bold; }
 
 /* 六格面板:上排星星卡持有量、下排太陽庫/月亮庫/棄牌區,自己跟對手共用同一個結構,
@@ -212,15 +235,21 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   gap: 4px;
   margin-bottom: 4px;
 }
+/* 設計圖的星星庫存列是嵌在一個內凹的長條槽裡,這裡用內陰影 + 淡邊框做出同樣的凹陷感 */
 .panel-cell {
   display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  border: 1px solid rgba(255,255,255,0.09);
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015));
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.25);
+  background: linear-gradient(180deg, rgba(6,10,20,0.45), rgba(6,10,20,0.15));
+  box-shadow: inset 0 2px 5px rgba(0,0,0,0.45);
   padding: 3px 2px 2px;
+}
+.band[data-side="mine"] .panel-cell {
+  border-color: rgba(150,180,220,0.28);
+  background: linear-gradient(180deg, rgba(12,26,48,0.5), rgba(30,56,94,0.2));
 }
 #oppBand .panel-grid { gap: 3px; margin-bottom: 3px; }
 #oppBand .panel-cell { padding: 2px 1px 1px; border-radius: 6px; }
@@ -246,11 +275,6 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   cursor: grab;
   touch-action: none;
   box-shadow: 0 0 0 3px var(--accent), 0 4px 10px rgba(0,0,0,0.5);
-}
-/* 底座圖示本身已經是暗色調的設計,不需要再疊一層 45% 灰階,不然會糊成一片看不清楚拳頭/手掌的線條 */
-.hand-card.hand-card-socket-empty {
-  filter: none;
-  opacity: 0.92;
 }
 .hand-card.selectable:hover { transform: translateY(-4px); }
 .hand-card.selectable:active { transform: translateY(-1px) scale(0.97); cursor: grabbing; }
@@ -302,11 +326,13 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   outline: 2px dashed var(--accent);
   outline-offset: 2px;
 }
+/* 拖到欄位上方的高亮:只加金色外框 + 內側光暈,不要用 background 簡寫,
+   否則會把空欄位卡框的漸層整片蓋掉、失去卡框質感 */
 .slot-wrap[data-drop-kind].drop-target-hover .slot-empty-card,
 .slot-wrap[data-drop-kind].drop-target-hover .slot-card-img {
   outline: 2px solid #ffd35c;
   outline-offset: 2px;
-  background: rgba(255, 211, 92, 0.15);
+  box-shadow: inset 0 0 18px rgba(255, 211, 92, 0.35), 0 0 14px 2px rgba(255, 211, 92, 0.4);
 }
 
 .hand-card-count {
@@ -335,8 +361,8 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
 .skip-tile:hover { border-color: var(--text-dim); color: var(--text); }
 
 .action-prompt {
-  background: rgba(75, 143, 94, 0.18);
-  border: 1px solid var(--accent);
+  background: rgba(217, 169, 74, 0.14);
+  border: 1px solid rgba(217,169,74,0.6);
   border-radius: 6px;
   padding: 4px 8px;
   font-size: 11.5px;
@@ -367,11 +393,11 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   transition: transform 0.15s ease, box-shadow 0.15s ease;
   transform-style: preserve-3d;
 }
-/* 已經揭示的牌依類型補一圈淡淡的光暈,呼應星/日/月各自的主題色,
+/* 已經揭示的牌依類型補一圈淡淡的光暈,呼應星/日/月各自的主題色(色值對齊設計圖的天體 symbol),
    卡片本身已經很有畫面了,這裡只加一點點提示不搶戲 */
-.slot-wrap[data-slot-kind="star"] .slot-card-img { box-shadow: 0 2px 5px rgba(0,0,0,0.4), 0 0 10px 1px rgba(59,110,165,0.45); }
-.slot-wrap[data-slot-kind="sun"] .slot-card-img { box-shadow: 0 2px 5px rgba(0,0,0,0.4), 0 0 10px 1px rgba(201,107,31,0.45); }
-.slot-wrap[data-slot-kind="moon"] .slot-card-img { box-shadow: 0 2px 5px rgba(0,0,0,0.4), 0 0 10px 1px rgba(106,63,160,0.45); }
+.slot-wrap[data-slot-kind="star"] .slot-card-img { box-shadow: 0 2px 5px rgba(0,0,0,0.45), 0 0 12px 1px rgba(159,180,216,0.45); }
+.slot-wrap[data-slot-kind="sun"] .slot-card-img { box-shadow: 0 2px 5px rgba(0,0,0,0.45), 0 0 12px 2px rgba(232,178,58,0.5); }
+.slot-wrap[data-slot-kind="moon"] .slot-card-img { box-shadow: 0 2px 5px rgba(0,0,0,0.45), 0 0 12px 1px rgba(126,166,221,0.45); }
 .slot-card-img.selectable {
   cursor: pointer;
   touch-action: none;
@@ -380,7 +406,7 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
 }
 @keyframes pulseSelectable {
   0%, 100% { box-shadow: 0 0 0 3px var(--accent); }
-  50% { box-shadow: 0 0 0 6px rgba(75,143,94,0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(217,169,74,0.45); }
 }
 
 /* 戰鬥畫面特效:翻牌、太陽強化、月亮發動、勝負對撞(由 app.js 的 triggerBattleEffects 觸發) */
@@ -419,16 +445,19 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
 }
 .flip-face.flip-front { transform: rotateY(180deg); }
 
+/* 太陽發動:金色炫光(對齊設計圖的金色太陽 symbol,不再是橘紅) */
 @keyframes sunPowerUp {
   0% { filter: brightness(1) saturate(1); box-shadow: 0 2px 5px rgba(0,0,0,0.4); }
-  40% { filter: brightness(1.7) saturate(1.5); box-shadow: 0 0 20px 6px rgba(255, 170, 60, 0.85); transform: scale(1.14); }
+  40% { filter: brightness(1.6) saturate(1.35); box-shadow: 0 0 22px 7px rgba(232, 178, 58, 0.9); transform: scale(1.14); }
   100% { filter: brightness(1) saturate(1); box-shadow: 0 2px 5px rgba(0,0,0,0.4); transform: scale(1); }
 }
 .slot-card-img.fx-sun { animation: sunPowerUp 0.55s ease-out; }
 
+/* 月亮發動:冷藍月光(對齊設計圖的藍色月牙 symbol,不再是紫色),
+   不用 hue-rotate 以免把卡圖本身的色相扭掉,改用亮度 + 藍色光暈 */
 @keyframes moonActivateFx {
   0% { filter: brightness(1); box-shadow: 0 2px 5px rgba(0,0,0,0.4); }
-  40% { filter: brightness(1.5) hue-rotate(20deg); box-shadow: 0 0 20px 6px rgba(150, 110, 255, 0.85); transform: scale(1.14) rotate(-4deg); }
+  40% { filter: brightness(1.45); box-shadow: 0 0 22px 7px rgba(126, 166, 221, 0.9); transform: scale(1.14) rotate(-4deg); }
   70% { transform: scale(1.05) rotate(3deg); }
   100% { filter: brightness(1); box-shadow: 0 2px 5px rgba(0,0,0,0.4); transform: scale(1) rotate(0deg); }
 }
@@ -470,13 +499,13 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   animation: shockExpand 0.55s cubic-bezier(.15,.8,.3,1) forwards;
 }
 .clash-shock-sun {
-  border: 4px solid rgba(255, 150, 60, 0.9);
-  box-shadow: 0 0 32px 9px rgba(255, 150, 60, 0.6);
+  border: 4px solid rgba(232, 178, 58, 0.9);
+  box-shadow: 0 0 32px 9px rgba(232, 178, 58, 0.6);
   animation: shockExpand 0.6s cubic-bezier(.15,.8,.3,1) forwards;
 }
 .clash-shock-moon {
-  border: 4px solid rgba(178, 120, 255, 0.9);
-  box-shadow: 0 0 32px 9px rgba(178, 120, 255, 0.6);
+  border: 4px solid rgba(126, 166, 221, 0.9);
+  box-shadow: 0 0 32px 9px rgba(126, 166, 221, 0.6);
   animation: shockExpand 0.6s cubic-bezier(.15,.8,.3,1) forwards;
 }
 @keyframes shockExpand {
@@ -669,17 +698,65 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   transition: opacity 0.28s ease-out, transform 0.28s ease-out;
 }
 .turn-order-banner.show { opacity: 1; transform: translate(-50%, 0); }
+/* 空欄位 = 設計圖的天體卡框:卡框底色 + 置中 symbol 浮水印 + 同心橢圓/菱形/邊角刻痕。
+   由 app.js 的 SLOT_SYM / FRAME_DECO(內嵌 SVG)提供圖層,這裡只負責排版與明暗。 */
 .slot-empty-card {
+  position: relative;
   height: 8.2dvh;
   width: auto;
   aspect-ratio: 400 / 560;
-  border-radius: 6px;
+  border-radius: 7px;
   display: block;
-  border: 2px dashed rgba(255,255,255,0.14);
-  filter: grayscale(80%) brightness(0.38) contrast(0.9);
-  opacity: 0.85;
-  transition: filter 0.2s ease, opacity 0.2s ease, border-color 0.2s ease;
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, rgba(30,42,68,0.75), rgba(14,21,38,0.9));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 6px rgba(0,0,0,0.45);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  overflow: hidden;
 }
+/* 我方(下方藍色區)的空框比對手亮一階,對應設計圖我方卡框偏藍、對手偏黑 */
+.bf-col[data-side="mine"] .slot-empty-card {
+  background: linear-gradient(160deg, rgba(43,74,119,0.78), rgba(21,38,66,0.92));
+  border-color: rgba(150,180,220,0.34);
+}
+/* 太陽欄位在設計圖是金框(唯一被金色框起來的格子),特別點出來 */
+.slot-wrap[data-slot-kind="sun"] .slot-empty-card {
+  border-color: rgba(217,169,74,0.55);
+  box-shadow: inset 0 0 12px rgba(217,169,74,0.10), 0 2px 6px rgba(0,0,0,0.45);
+}
+.slot-sym,
+.slot-deco {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  pointer-events: none;
+}
+/* symbol 當浮水印:縮在框內、壓低不透明度,不搶實際卡圖的戲 */
+.slot-sym { background-size: 54% auto; opacity: 0.38; }
+.slot-deco { background-size: 100% 100%; opacity: 0.75; }
+
+/* 星星存量指示:設計圖星星格底部的三顆菱形 */
+.star-pips {
+  display: flex;
+  gap: 3px;
+  justify-content: center;
+  margin-top: 2px;
+}
+.star-pip {
+  width: 5px;
+  height: 5px;
+  transform: rotate(45deg);
+  border: 1px solid rgba(180,200,230,0.5);
+  background: transparent;
+}
+.star-pip.on { background: var(--star); border-color: var(--star); }
+.band[data-side="mine"] .star-pip.on { background: #8fb6e8; border-color: #8fb6e8; }
+#oppBand .star-pip { width: 3.5px; height: 3.5px; gap: 2px; }
+
+/* 星星庫存的底座卡框:本身已是暗色設計,不要再疊灰階,不然拳頭/剪刀的線條會糊掉 */
+.hand-card.hand-card-socket { filter: none; opacity: 0.95; }
+/* 該型別打光(x0):整格壓暗,一眼看出「這型別沒牌了」 */
+.hand-card.hand-card-socket.socket-depleted { filter: grayscale(70%) brightness(0.45); opacity: 0.6; }
 
 .pile-tile-wrap {
   position: relative;
@@ -688,14 +765,19 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   align-items: center;
   width: auto;
 }
+/* 牌庫在設計圖是「一疊」卡(側邊露出好幾層紙邊),用多層位移陰影模擬,不需要多畫 DOM */
 .pile-back {
   height: 5dvh;
   width: auto;
   aspect-ratio: 400 / 560;
   border-radius: 5px;
   display: block;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.4);
-  filter: grayscale(30%) brightness(0.85);
+  box-shadow:
+    2px 2px 0 rgba(120,145,185,0.30),
+    4px 4px 0 rgba(90,112,150,0.24),
+    6px 6px 0 rgba(60,78,110,0.20),
+    0 3px 8px rgba(0,0,0,0.5);
+  filter: grayscale(20%) brightness(0.92);
   transition: transform 0.15s ease;
 }
 .pile-back.selectable {
