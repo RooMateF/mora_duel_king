@@ -123,10 +123,31 @@ const Net = (() => {
     return myUid;
   }
 
+  // ── 房間清理 ──────────────────────────────────────────────
+  // Realtime Database 沒有 TTL,沒清就會永遠留著。三道防線:
+  //  1) 等待對手期間掛 onDisconnect:房主關掉分頁/斷線,伺服器端自動把房間刪掉。
+  //  2) 對手一進來就取消上面那個 onDisconnect —— 對局中短暫斷線很常見,
+  //     不能因為一次網路抖動就把進行中的對局整個刪掉。
+  //  3) 對局結束後由房主主動刪除。
+  // 註:刪整個 rooms/$roomCode 需要 database.rules.json 給房主該層的寫入權限,
+  //     規則沒部署的話這裡會被拒絕(所以呼叫端都要容錯,不能讓遊戲流程掛掉)。
+  function armRoomAutoDelete(code) {
+    return db.ref(`rooms/${code}`).onDisconnect().remove();
+  }
+
+  function cancelRoomAutoDelete(code) {
+    return db.ref(`rooms/${code}`).onDisconnect().cancel();
+  }
+
+  function deleteRoom(code) {
+    return db.ref(`rooms/${code}`).remove();
+  }
+
   return {
     init, signIn, createRoom, joinRoom, watchMeta, watchPublic,
     publishPublic, publishPrivate, watchPrivate,
     sendRpcRequest, listenRpcRequest, sendRpcResponse, waitRpcResponse,
+    armRoomAutoDelete, cancelRoomAutoDelete, deleteRoom,
     myUid: myUidValue,
   };
 })();

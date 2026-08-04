@@ -2,6 +2,8 @@
   "rules": {
     "rooms": {
       "$roomCode": {
+        "//": "房主可以寫入(進而刪除)整個房間節點,對局結束或等待中斷線時才清得掉整間房。Realtime Database 沒有 TTL,不清就會永遠累積。房間還不存在時也放行,建房才寫得進去。注意規則是往下放寬的:這條為 false 時不會擋掉下面各自的權限,所以加入者照樣能改 meta。",
+        ".write": "auth != null && (!data.exists() || data.child('meta/hostUid').val() === auth.uid)",
         "meta": {
           ".read": "auth != null",
           ".write": "auth != null"

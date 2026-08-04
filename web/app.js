@@ -7,6 +7,9 @@ let myRole = null; // "p1" | "p2"
 let game = null; // 只有房主會建立
 let hostStarted = false;
 let gameLog = [];
+// 累計寫入過的 log 行數。gameLog 本身會被裁切、發布到 Firebase 的版本更只送最後幾行,
+// 長度都不再單調遞增,所以動畫不能再靠「陣列長度變化」判斷哪些是新事件,改看這個序號。
+let logTotal = 0;
 let lastPublicSeen = null;
 let lastPrivateSeen = null;
 let pendingAsk = null; // { title, prompt, options, kind, resolve } — 待處理的「打牌」決策
@@ -15,6 +18,39 @@ let pendingAsk = null; // { title, prompt, options, kind, resolve } — 待處�
 // 這點很重要:引擎剛把某個狀態(例如 starsRevealed)寫回去、還沒來得及讓 log()/publishState 補一次
 // render 之前,如果馬上要跳出下一個提示(showCardPickUI),不能只是重播上一次看到的舊畫面。
 let refreshBoard = () => { if (lastPublicSeen) renderPublic(lastPublicSeen); };
+
+// 發布到 Firebase 的對戰紀錄只送最後這幾行。原本每次狀態更新都把整份紀錄(上限 300 行)
+// 重新 set 一次,而雙方都在監聽整個 public 節點 —— 等於每更新一次就把完整紀錄重新下載一遍,
+// 一局累積下來的流量遠大於實際資料量。畫面上的紀錄面板本來也只看得到最近幾十行。
+const PUBLISHED_LOG_LINES = 60;
+
+function pushLog(text) {
+  gameLog.push(text);
+  logTotal++;
+  if (gameLog.length > 300) gameLog = gameLog.slice(-300);
+}
+
+function resetLog() {
+  gameLog = [];
+  logTotal = 0;
+}
+
+function publishedLog() {
+  return gameLog.slice(-PUBLISHED_LOG_LINES);
+}
+
+// 對局結束後由房主刪掉房間。不能立刻刪:對手要先收到「最終狀態」才看得到勝負結果,
+// 房間一沒了對方畫面就停在上一刻。留一段緩衝再刪。
+const ROOM_CLEANUP_DELAY_MS = 20000;
+
+function scheduleRoomCleanup(code) {
+  if (!code) return;
+  setTimeout(() => {
+    Net.deleteRoom(code).catch((e) => {
+      console.warn("刪除房間失敗(檢查 database.rules.json 是否已部署):", e.message);
+    });
+  }, ROOM_CLEANUP_DELAY_MS);
+}
 
 function $(id) { return document.getElementById(id); }
 
@@ -63,6 +99,11 @@ async function onCreate() {
   myRole = "p1";
   $("roomCodeDisplay").textContent = roomCode;
   showScreen("waiting");
+  // 還在等對手的階段就掛好自動刪除:房主這時候關掉分頁,房間不該留在資料庫裡。
+  // 失敗(例如規則還沒部署)只警告,不影響開房。
+  Net.armRoomAutoDelete(roomCode).catch((e) => {
+    console.warn("無法掛上房間自動刪除(檢查 database.rules.json 是否已部署):", e.message);
+  });
   Net.watchMeta(roomCode, onRoomUpdateAsHost);
 }
 
@@ -111,6 +152,9 @@ function startGuest() {
 
 function startHostGame(hostName, guestName, guestUid) {
   showScreen("gameScreen");
+  // 對局開始後就取消自動刪除:對戰中短暫斷線很常見,不能因為一次網路抖動
+  // 就把進行中的對局整個刪掉。改由結束時主動刪。
+  Net.cancelRoomAutoDelete(roomCode).catch(() => { /* 沒掛成功過就不用取消 */ });
   const ui = makeUi(guestUid);
   game = new Game(ui, hostName, guestName);
   // 房主自己畫面用的即時重畫:直接從 game 現況組快照,不用等 Firebase 一來一回,
@@ -157,8 +201,7 @@ function makeUi(guestUid) {
     return value;
   }
   async function log(text) {
-    gameLog.push(text);
-    if (gameLog.length > 300) gameLog = gameLog.slice(-300);
+    pushLog(text);
     await publishState(guestUid);
     await sleep(delayForLogLine(text));
   }
@@ -201,7 +244,8 @@ function buildHostPub() {
     firstIsP1: game.firstIsP1,
     p1: boardSnapshotFor(game.p1, game.starsRevealed),
     p2: boardSnapshotFor(game.p2, game.starsRevealed),
-    log: gameLog,
+    log: publishedLog(),
+    logSeq: logTotal,
     winnerRole: null,
     updatedAt: Date.now(),
   };
@@ -227,21 +271,23 @@ async function runGameLoop(guestUid) {
     }
   } catch (e) {
     if (e instanceof GameOverError) {
-      gameLog.push(`\n★★★ 遊戲結束!獲勝者:${e.winnerRole === "p1" ? game.p1.name : game.p2.name} ★★★`);
+      pushLog(`\n★★★ 遊戲結束!獲勝者:${e.winnerRole === "p1" ? game.p1.name : game.p2.name} ★★★`);
       const pub = {
         round: game.roundNum,
         starsRevealed: true,
         firstIsP1: game.firstIsP1,
         p1: boardSnapshotFor(game.p1, true),
         p2: boardSnapshotFor(game.p2, true),
-        log: gameLog,
+        log: publishedLog(),
+        logSeq: logTotal,
         winnerRole: e.winnerRole,
         updatedAt: Date.now(),
       };
       await Net.publishPublic(roomCode, pub);
+      scheduleRoomCleanup(roomCode);
     } else {
       console.error(e);
-      gameLog.push(`發生錯誤:${e.message}`);
+      pushLog(`發生錯誤:${e.message}`);
       await publishState(guestUid);
     }
   }
@@ -253,7 +299,7 @@ function startSinglePlayer(difficulty) {
   isHost = true;
   myRole = "p1";
   roomCode = null;
-  gameLog = [];
+  resetLog();
   window.__gameOverShown = false;
   showScreen("gameScreen");
 
@@ -273,8 +319,7 @@ function makeLocalUi() {
     return value;
   }
   async function log(text) {
-    gameLog.push(text);
-    if (gameLog.length > 300) gameLog = gameLog.slice(-300);
+    pushLog(text);
     renderLocalState();
     await sleep(delayForLogLine(text));
   }
@@ -298,7 +343,8 @@ function renderLocalState(winnerRole) {
     firstIsP1: game.firstIsP1,
     p1: boardSnapshotFor(game.p1, game.starsRevealed || !!winnerRole),
     p2: boardSnapshotFor(game.p2, game.starsRevealed || !!winnerRole),
-    log: gameLog,
+    log: publishedLog(),
+    logSeq: logTotal,
     winnerRole: winnerRole || null,
   };
   lastPrivateSeen = {
@@ -315,11 +361,11 @@ async function runLocalGameLoop() {
     }
   } catch (e) {
     if (e instanceof GameOverError) {
-      gameLog.push(`\n★★★ 遊戲結束!獲勝者:${e.winnerRole === "p1" ? game.p1.name : game.p2.name} ★★★`);
+      pushLog(`\n★★★ 遊戲結束!獲勝者:${e.winnerRole === "p1" ? game.p1.name : game.p2.name} ★★★`);
       renderLocalState(e.winnerRole);
     } else {
       console.error(e);
-      gameLog.push(`發生錯誤:${e.message}`);
+      pushLog(`發生錯誤:${e.message}`);
       renderLocalState();
     }
   }
@@ -739,13 +785,20 @@ function flyAbsorb(fromEl, toEl, cardName, onArrive) {
   }, 560);
 }
 
-let scannedLogLines = 0; // pub.log 其實是共用同一個可變陣列的參照,不能靠比較 prevPub.log/pub.log 本身抓差異,要自己記掃到哪
+// pub.log 其實是共用同一個可變陣列的參照,不能靠比較 prevPub.log/pub.log 本身抓差異,要自己記掃到哪。
+// 而且發布出去的 log 只有最後 PUBLISHED_LOG_LINES 行(是個固定長度的滑動視窗),
+// 一旦滿了長度就不再增加 —— 所以不能用陣列長度當進度,要用累計序號 logSeq。
+let scannedLogSeq = 0;
 
 function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
   const allLines = pub.log || [];
-  if (allLines.length < scannedLogLines) scannedLogLines = 0; // 開新的一局,log 陣列變短了,計數器歸零
-  const newLines = allLines.slice(scannedLogLines);
-  scannedLogLines = allLines.length;
+  // 舊版狀態沒有 logSeq 時退回用長度,至少不會整個壞掉
+  const seq = typeof pub.logSeq === "number" ? pub.logSeq : allLines.length;
+  if (seq < scannedLogSeq) scannedLogSeq = 0; // 開新的一局,序號從頭算
+  // 只取這次真正新增的行。若因為斷線漏掉太多,最多也只能拿到視窗裡還留著的那些
+  const newCount = Math.min(seq - scannedLogSeq, allLines.length);
+  const newLines = newCount > 0 ? allLines.slice(allLines.length - newCount) : [];
+  scannedLogSeq = seq;
 
   if (!prevPub) return;
   const bf = $("battlefield");
@@ -1663,7 +1716,7 @@ function withTurnLimit(inner, options) {
       resetArmed();
       $("drawPickOverlay").classList.add("hidden");
       $("modalOverlay").classList.add("hidden");
-      gameLog.push(`(逾時 ${TURN_LIMIT_MS / 1000} 秒,自動選擇)`);
+      pushLog(`(逾時 ${TURN_LIMIT_MS / 1000} 秒,自動選擇)`);
       if (lastPublicSeen) renderPublic(lastPublicSeen);
       finish(fallback);
     });
