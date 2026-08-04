@@ -22,6 +22,7 @@ body {
     radial-gradient(ellipse 60% 40% at 15% 0%, rgba(59,110,165,0.16), transparent 60%),
     radial-gradient(ellipse 55% 35% at 100% 15%, rgba(201,107,31,0.14), transparent 60%),
     radial-gradient(ellipse 60% 45% at 50% 100%, rgba(106,63,160,0.14), transparent 60%),
+    url("img/board_bg.jpg") center / cover no-repeat fixed,
     var(--bg);
   color: var(--text);
   font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
@@ -246,6 +247,11 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   touch-action: none;
   box-shadow: 0 0 0 3px var(--accent), 0 4px 10px rgba(0,0,0,0.5);
 }
+/* 底座圖示本身已經是暗色調的設計,不需要再疊一層 45% 灰階,不然會糊成一片看不清楚拳頭/手掌的線條 */
+.hand-card.hand-card-socket-empty {
+  filter: none;
+  opacity: 0.92;
+}
 .hand-card.selectable:hover { transform: translateY(-4px); }
 .hand-card.selectable:active { transform: translateY(-1px) scale(0.97); cursor: grabbing; }
 
@@ -361,6 +367,11 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   transition: transform 0.15s ease, box-shadow 0.15s ease;
   transform-style: preserve-3d;
 }
+/* 已經揭示的牌依類型補一圈淡淡的光暈,呼應星/日/月各自的主題色,
+   卡片本身已經很有畫面了,這裡只加一點點提示不搶戲 */
+.slot-wrap[data-slot-kind="star"] .slot-card-img { box-shadow: 0 2px 5px rgba(0,0,0,0.4), 0 0 10px 1px rgba(59,110,165,0.45); }
+.slot-wrap[data-slot-kind="sun"] .slot-card-img { box-shadow: 0 2px 5px rgba(0,0,0,0.4), 0 0 10px 1px rgba(201,107,31,0.45); }
+.slot-wrap[data-slot-kind="moon"] .slot-card-img { box-shadow: 0 2px 5px rgba(0,0,0,0.4), 0 0 10px 1px rgba(106,63,160,0.45); }
 .slot-card-img.selectable {
   cursor: pointer;
   touch-action: none;
@@ -660,15 +671,14 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
 .turn-order-banner.show { opacity: 1; transform: translate(-50%, 0); }
 .slot-empty-card {
   height: 8.2dvh;
+  width: auto;
   aspect-ratio: 400 / 560;
   border-radius: 6px;
-  border: 2px dashed #4a4f5a;
-  background: var(--empty);
-  color: var(--text-dim);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
+  display: block;
+  border: 2px dashed rgba(255,255,255,0.14);
+  filter: grayscale(80%) brightness(0.38) contrast(0.9);
+  opacity: 0.85;
+  transition: filter 0.2s ease, opacity 0.2s ease, border-color 0.2s ease;
 }
 
 .pile-tile-wrap {

@@ -925,17 +925,26 @@ function pileCardTile(label, count, backName, drawValue) {
   return wrap;
 }
 
+// 卡圖檔名不會變,但圖片「內容」可能整批換掉(例如美術重做),瀏覽器會用檔名快取,
+// 換圖後玩家可能還是吃到舊圖。跟 index.html 的 ?v= 同一套邏輯,換卡圖時記得手動遞增。
+const CARD_ASSET_VERSION = 2;
+
 function cardImgSrc(name) {
-  return `cards/${encodeURIComponent(name)}.png`;
+  return `cards/${encodeURIComponent(name)}.png?v=${CARD_ASSET_VERSION}`;
 }
+
+// 星星卡某型別打光了(x0)時,不再繼續顯示那張卡的實際卡圖,改顯示戰場介面設計圖裡
+// 那個拳頭/手掌/剪刀的「底座」圖示,呼應「這個型別的牌已經出完、只剩空底座」的概念
+const STAR_SOCKET_EMPTY_SRC = { "石頭": "img/socket_石頭.png", "布": "img/socket_布.png", "剪刀": "img/socket_剪刀.png" };
 
 function handCardTile(name, kind, count, onTap, value) {
   const wrap = document.createElement("div");
   const isArmed = onTap && armedValue !== null && value !== undefined && armedValue === value;
   wrap.className = "hand-card-wrap" + (isArmed ? " armed" : "");
+  const isEmptySocket = kind === "star" && count === 0 && STAR_SOCKET_EMPTY_SRC[name];
   const img = document.createElement("img");
-  img.className = `hand-card card-${kind}` + (onTap ? " selectable" : "");
-  img.src = cardImgSrc(name);
+  img.className = `hand-card card-${kind}` + (onTap ? " selectable" : "") + (isEmptySocket ? " hand-card-socket-empty" : "");
+  img.src = isEmptySocket ? STAR_SOCKET_EMPTY_SRC[name] : cardImgSrc(name);
   img.alt = name;
   img.draggable = false;
   attachInteractiveCard(img, {
@@ -1282,9 +1291,13 @@ function slotEl(header, content, kind, back, onTap, dropKind, value) {
     return wrap;
   }
 
-  const empty = document.createElement("div");
+  // 空欄位改用該類型卡背的黯淡版本當佔位圖示(不是純文字「—」),
+  // 平常就先暗示這格是星星/太陽/月亮欄位,牌蓋上去後同一張圖直接轉亮
+  const empty = document.createElement("img");
   empty.className = "slot-empty-card";
-  empty.textContent = "—";
+  empty.src = cardImgSrc(`back_${kind}`);
+  empty.alt = "";
+  empty.draggable = false;
   wrap.appendChild(empty);
   return wrap;
 }
