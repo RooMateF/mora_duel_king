@@ -927,6 +927,11 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
   filter: grayscale(20%) brightness(0.92);
   transition: transform 0.15s ease;
 }
+/* 牌庫用的深色牌庫美術本身就壓得很暗了,不需要再套 .pile-back 那層減亮/去彩,
+   不然金色徽記會整個沉掉看不出來 */
+.pile-back.pile-deck {
+  filter: none;
+}
 .pile-back.selectable {
   cursor: grab;
   touch-action: none;

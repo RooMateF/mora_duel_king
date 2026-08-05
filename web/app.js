@@ -999,8 +999,8 @@ function renderOppBand(container, snapshot) {
   });
   row.appendChild(stars);
 
-  row.appendChild(pileCardTile("太陽庫", snapshot.sunPileCount, "back_sun"));
-  row.appendChild(pileCardTile("月亮庫", snapshot.moonPileCount, "back_moon"));
+  row.appendChild(pileCardTile("太陽庫", snapshot.sunPileCount, "back_sun", null, true));
+  row.appendChild(pileCardTile("月亮庫", snapshot.moonPileCount, "back_moon", null, true));
   row.appendChild(pileChip("棄牌", snapshot.discardCount, "discard"));
   container.appendChild(row);
 }
@@ -1025,7 +1025,7 @@ function renderMyBand(container, snapshot, privateData) {
   // 上排:牌庫夾住中間的星星庫存槽,對應設計圖下方帶的左右牌堆 + 中央三格
   const topRow = document.createElement("div");
   topRow.className = "my-row";
-  topRow.appendChild(pileCardTile("太陽庫", snapshot.sunPileCount, "back_sun", drawValueFor("太陽")));
+  topRow.appendChild(pileCardTile("太陽庫", snapshot.sunPileCount, "back_sun", drawValueFor("太陽"), true));
 
   const slotStrip = document.createElement("div");
   slotStrip.className = "star-strip";
@@ -1037,7 +1037,7 @@ function renderMyBand(container, snapshot, privateData) {
     slotStrip.appendChild(cell);
   });
   topRow.appendChild(slotStrip);
-  topRow.appendChild(pileCardTile("月亮庫", snapshot.moonPileCount, "back_moon", drawValueFor("月亮")));
+  topRow.appendChild(pileCardTile("月亮庫", snapshot.moonPileCount, "back_moon", drawValueFor("月亮"), true));
   container.appendChild(topRow);
 
   // 下排:手牌 + 棄牌。設計圖左下角那張小星星卡在本作沒有對應資料
@@ -1081,13 +1081,18 @@ function pileChip(label, count, kind) {
 }
 
 // drawValue: 非空字串("太陽"/"月亮")時,這個牌堆可以用向下滑動的手勢抽牌
-function pileCardTile(label, count, backName, drawValue) {
+// 牌庫(太陽庫/月亮庫)在設計圖裡是專屬的深色卡背:炭黑/深藍底 + 金色或藍色的天體徽記,
+// 跟手牌那種亮色華麗卡背刻意區隔 —— 牌庫是背景元件要壓得住,手上的牌才該搶眼。
+const DECK_ART_SRC = { back_sun: "img/deck_sun.png", back_moon: "img/deck_moon.png" };
+
+// isDeck: true 代表這是牌庫(用設計圖的深色牌庫美術),false/省略代表是手牌張數指示(用一般卡背)
+function pileCardTile(label, count, backName, drawValue, isDeck) {
   const wrap = document.createElement("div");
   const isArmed = drawValue && armedValue === drawValue;
   wrap.className = "hand-card-wrap pile-tile-wrap" + (isArmed ? " armed" : "");
   const img = document.createElement("img");
-  img.className = "hand-card pile-back" + (drawValue ? " selectable" : "");
-  img.src = cardImgSrc(backName);
+  img.className = "hand-card pile-back" + (drawValue ? " selectable" : "") + (isDeck ? " pile-deck" : "");
+  img.src = (isDeck && DECK_ART_SRC[backName]) ? DECK_ART_SRC[backName] : cardImgSrc(backName);
   img.alt = label;
   img.draggable = false;
   if (drawValue) {
