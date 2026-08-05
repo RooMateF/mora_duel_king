@@ -231,20 +231,58 @@ class Game {
     return choice || available[0];
   }
 
+  // 這回合要蓋哪張星星,會直接決定手上的太陽升級卡能不能發動(型別不符就是廢牌),
+  // 所以要「先看手上的太陽卡、再回頭挑星星」。舊版是反過來的:先照讀牌結果挑星星,
+  // 太陽階段才發現型別對不上,升級卡因此常常整局都出不掉。
   aiChooseStar(aiPlayer, available) {
     const totalHistory = Object.values(this.humanStarHistory).reduce((a, b) => a + b, 0);
+    const predicted = this.predictHumanStar(totalHistory);
+
+    const enabling = this.aiStarForSunPlan(aiPlayer, available, predicted);
+    if (enabling) {
+      // 難度越高越會照著太陽卡佈局;簡單模式大多還是隨便出,維持難度落差
+      const followChance = { easy: 0.3, normal: 0.75, hard: 0.92 }[this.difficulty];
+      if (Math.random() < followChance) return enabling;
+    }
+
     if (this.difficulty === "easy" || totalHistory === 0) {
       return available[Math.floor(Math.random() * available.length)];
     }
     const noise = { easy: 1.0, normal: 0.25, hard: 0.1 }[this.difficulty];
     if (Math.random() < noise) return available[Math.floor(Math.random() * available.length)];
+    const counter = { "石頭": "布", "布": "剪刀", "剪刀": "石頭" }[predicted];
+    return available.includes(counter) ? counter : available[Math.floor(Math.random() * available.length)];
+  }
+
+  // 對手最常出的星星(沒有歷史資料時回 null)
+  predictHumanStar(totalHistory) {
+    if (!totalHistory) return null;
     let mostCommon = STAR_TYPES[0], mostCount = -1;
     for (const t of STAR_TYPES) {
       const c = this.humanStarHistory[t] || 0;
       if (c > mostCount) { mostCount = c; mostCommon = t; }
     }
-    const counter = { "石頭": "布", "布": "剪刀", "剪刀": "石頭" }[mostCommon];
-    return available.includes(counter) ? counter : available[Math.floor(Math.random() * available.length)];
+    return mostCommon;
+  }
+
+  // 手上有升級太陽卡、而且它需要的星星還有存貨時,回傳那個星星型別(讓這張太陽卡這回合能發動)。
+  // 有多張可選時,優先挑「升級後打得贏預測出招」的那張,其次是能打平的。
+  aiStarForSunPlan(aiPlayer, available, predicted) {
+    const cands = [];
+    for (const c of aiPlayer.handSun) {
+      const evo = SUN_EVOLVE[c];
+      if (!evo) continue;
+      const [req, piece] = evo;
+      if (available.includes(req)) cands.push({ req, piece });
+    }
+    if (!cands.length) return null;
+    if (predicted) {
+      const win = cands.find((x) => beats(x.piece, predicted) === 1);
+      if (win) return win.req;
+      const tie = cands.find((x) => beats(x.piece, predicted) === 0);
+      if (tie) return tie.req;
+    }
+    return cands[Math.floor(Math.random() * cands.length)].req;
   }
 
   // -- 太陽階段 -------------------------------------------------------

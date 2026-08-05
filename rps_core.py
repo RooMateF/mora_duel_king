@@ -333,15 +333,54 @@ class Game:
             return choice if choice is not None else available[0]
         return self.ai_choose_star(player, available)
 
+    # 這回合要蓋哪張星星,會直接決定手上的太陽升級卡能不能發動(型別不符就是廢牌),
+    # 所以要「先看手上的太陽卡、再回頭挑星星」。舊版是反過來的:先照讀牌結果挑星星,
+    # 太陽階段才發現型別對不上,升級卡因此常常整局都出不掉。
     def ai_choose_star(self, ai_player, available):
-        if self.difficulty == "easy" or sum(self.human_star_history.values()) == 0:
+        total_history = sum(self.human_star_history.values())
+        predicted = self.predict_human_star(total_history)
+
+        enabling = self.ai_star_for_sun_plan(ai_player, available, predicted)
+        if enabling is not None:
+            # 難度越高越會照著太陽卡佈局;簡單模式大多還是隨便出,維持難度落差
+            follow_chance = {"easy": 0.3, "normal": 0.75, "hard": 0.92}[self.difficulty]
+            if random.random() < follow_chance:
+                return enabling
+
+        if self.difficulty == "easy" or total_history == 0:
             return random.choice(available)
         noise = {"easy": 1.0, "normal": 0.25, "hard": 0.1}[self.difficulty]
         if random.random() < noise:
             return random.choice(available)
-        most_common = self.human_star_history.most_common(1)[0][0]
-        counter = {"石頭": "布", "布": "剪刀", "剪刀": "石頭"}[most_common]
+        counter = {"石頭": "布", "布": "剪刀", "剪刀": "石頭"}[predicted]
         return counter if counter in available else random.choice(available)
+
+    # 對手最常出的星星(沒有歷史資料時回 None)
+    def predict_human_star(self, total_history):
+        if not total_history:
+            return None
+        return self.human_star_history.most_common(1)[0][0]
+
+    # 手上有升級太陽卡、而且它需要的星星還有存貨時,回傳那個星星型別(讓這張太陽卡這回合能發動)。
+    # 有多張可選時,優先挑「升級後打得贏預測出招」的那張,其次是能打平的。
+    def ai_star_for_sun_plan(self, ai_player, available, predicted):
+        cands = []
+        for c in ai_player.hand_sun:
+            if c not in SUN_EVOLVE:
+                continue
+            req, piece = SUN_EVOLVE[c]
+            if req in available:
+                cands.append((req, piece))
+        if not cands:
+            return None
+        if predicted is not None:
+            for req, piece in cands:
+                if beats(piece, predicted) == 1:
+                    return req
+            for req, piece in cands:
+                if beats(piece, predicted) == 0:
+                    return req
+        return random.choice(cands)[0]
 
     # -- 太陽階段 -------------------------------------------------------
 
