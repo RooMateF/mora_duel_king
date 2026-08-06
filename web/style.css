@@ -60,31 +60,6 @@ body {
 h1 { margin-bottom: 0; }
 .subtitle { color: var(--text-dim); margin-top: 4px; }
 
-#lobby input {
-  display: block;
-  width: 260px;
-  margin: 10px 0;
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid #444;
-  background: #0f1014;
-  color: var(--text);
-  font-size: 14px;
-}
-
-.lobby-actions { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 16px; }
-.lobby-card {
-  background: var(--panel);
-  border-radius: 10px;
-  padding: 16px;
-  flex: 1;
-  min-width: 220px;
-}
-.lobby-card h3 { margin-top: 0; }
-
-.diff-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
-.diff-buttons button { flex: 1; min-width: 60px; }
-
 /* 按鈕走設計圖的「深藍底 + 金邊」,不用金色實心底(金底配白字對比不足) */
 button {
   background: linear-gradient(180deg, #2b4670, #1b2f52 60%, #142441);
@@ -111,6 +86,247 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.35)
 }
 
 .msg { color: #e07a7a; min-height: 20px; margin-top: 8px; }
+
+/* ===================================================================
+   大廳畫面 — Astrology-Tech Minimalist (LOBBY_UI_DESIGN.md)
+   深邃星空底 + 冰銀藍細框 + 恆星金強調,右側常駐旋轉星盤,
+   左側直向卡片式按鈕群,每顆按鈕角落做細節裝飾。
+   =================================================================== */
+:root {
+  --lb-bg: #0A0E1A;
+  --lb-panel: #161B29;
+  --lb-border: #A0C4FF;
+  --lb-gold: #FFD700;
+  --lb-cyan: #00F2FF;
+  --lb-ink: #F0F0F0;
+  --lb-dim: #8892B0;
+}
+
+.lobby-screen {
+  position: relative;
+  max-width: none;
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 78% 45%, #101a30 0%, var(--lb-bg) 55%, #05070d 100%);
+  font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  display: flex;
+  align-items: center;
+}
+
+/* 四角細框裝飾,呼應設計圖左上/右下的直角折線 */
+.lobby-frame { position: absolute; inset: 14px; pointer-events: none; z-index: 1; }
+.lf-corner { position: absolute; width: 34px; height: 34px; border: 1px solid rgba(160,196,255,0.45); opacity: 0.8; }
+.lf-tl { top: 0; left: 0; border-right: none; border-bottom: none; }
+.lf-tr { top: 0; right: 0; border-left: none; border-bottom: none; }
+.lf-bl { bottom: 0; left: 0; border-right: none; border-top: none; }
+.lf-br { bottom: 0; right: 0; border-left: none; border-top: none; }
+
+/* 右側星盤:同心圓 + 星點,極慢速旋轉營造占星儀器感 */
+.lobby-starmap {
+  position: absolute;
+  top: 50%; right: -14%;
+  width: min(68vw, 940px); height: min(68vw, 940px);
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background-image:
+    /* 放射狀刻度線,呼應星盤儀器感 */
+    repeating-conic-gradient(from 0deg, rgba(160,196,255,0.14) 0deg 0.5deg, transparent 0.5deg 30deg),
+    radial-gradient(circle at 50% 50%, transparent 0 22%, rgba(160,196,255,0.30) 22% 22.4%, transparent 22.4%),
+    radial-gradient(circle at 50% 50%, transparent 0 40%, rgba(160,196,255,0.26) 40% 40.4%, transparent 40.4%),
+    radial-gradient(circle at 50% 50%, transparent 0 58%, rgba(217,169,74,0.22) 58% 58.4%, transparent 58.4%),
+    radial-gradient(circle at 50% 50%, transparent 0 76%, rgba(160,196,255,0.20) 76% 76.4%, transparent 76.4%),
+    radial-gradient(circle at 50% 50%, transparent 0 94%, rgba(160,196,255,0.14) 94% 94.4%, transparent 94.4%);
+  opacity: 0.9;
+  animation: lobbySpin 160s linear infinite;
+  z-index: 0;
+}
+.lobby-starmap::before,
+.lobby-starmap::after {
+  content: "";
+  position: absolute; inset: 6%;
+  border-radius: 50%;
+  background-image:
+    radial-gradient(1.8px 1.8px at 12% 30%, #eaf1ff 0, transparent 65%),
+    radial-gradient(1.4px 1.4px at 24% 68%, #eaf1ff 0, transparent 65%),
+    radial-gradient(2.6px 2.6px at 40% 18%, #ffe9a8 0, transparent 65%),
+    radial-gradient(1.4px 1.4px at 55% 82%, #eaf1ff 0, transparent 65%),
+    radial-gradient(2px 2px at 68% 40%, #eaf1ff 0, transparent 65%),
+    radial-gradient(1.4px 1.4px at 78% 12%, #eaf1ff 0, transparent 65%),
+    radial-gradient(2.6px 2.6px at 85% 60%, #ffe9a8 0, transparent 65%),
+    radial-gradient(1.4px 1.4px at 92% 82%, #eaf1ff 0, transparent 65%),
+    radial-gradient(1.8px 1.8px at 6% 52%, #eaf1ff 0, transparent 65%),
+    radial-gradient(1.4px 1.4px at 46% 94%, #eaf1ff 0, transparent 65%),
+    linear-gradient(115deg, transparent 39.6%, rgba(234,241,255,0.35) 40%, transparent 40.4%),
+    linear-gradient(78deg, transparent 66.6%, rgba(234,241,255,0.28) 67%, transparent 67.4%);
+  opacity: 0.85;
+}
+.lobby-starmap::after { inset: 16%; transform: rotate(35deg); opacity: 0.5; }
+@keyframes lobbySpin { to { transform: translateY(-50%) rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .lobby-starmap { animation: none; } }
+
+.lobby-left {
+  position: relative;
+  z-index: 2;
+  width: min(92vw, 460px);
+  margin-left: max(6vw, 32px);
+  padding: 48px 0 32px;
+}
+
+.lobby-brand { margin-bottom: 30px; }
+.lobby-compass { width: 92px; height: 92px; display: block; margin-bottom: 18px; }
+.lc-ring { fill: none; stroke: var(--lb-gold); stroke-width: 0.7; opacity: 0.55; }
+.lc-ring-dash { stroke-dasharray: 2 3; opacity: 0.4; }
+.lc-star { fill: var(--lb-gold); filter: drop-shadow(0 0 6px rgba(255,215,0,0.55)); }
+.lc-core { fill: var(--lb-bg); stroke: var(--lb-gold); stroke-width: 1; }
+
+.lobby-brand h1 {
+  font-family: "Cinzel", "Noto Serif TC", serif;
+  font-weight: 700;
+  font-size: clamp(30px, 6vw, 40px);
+  letter-spacing: 6px;
+  color: var(--lb-ink);
+  text-shadow: 0 0 18px rgba(255,215,0,0.18);
+  margin: 0;
+}
+.lb-sep { color: var(--lb-gold); font-size: 0.7em; margin: 0 2px; vertical-align: 2px; }
+.lobby-brand .subtitle {
+  font-family: "Noto Sans TC", sans-serif;
+  font-size: 13px;
+  letter-spacing: 3px;
+  color: var(--lb-dim);
+  margin: 8px 0 0;
+}
+.lobby-divider { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
+.lobby-divider span { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(160,196,255,0.4), transparent); }
+.ld-dot { color: var(--lb-gold); font-size: 12px; }
+
+.lobby-name-row { margin-bottom: 22px; }
+#lobby input {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 4px;
+  border: 1px solid var(--lb-border);
+  background: rgba(22,27,41,0.6);
+  color: var(--lb-ink);
+  font-size: 14px;
+  font-family: "Noto Sans TC", sans-serif;
+  letter-spacing: 1px;
+}
+#lobby input::placeholder { color: var(--lb-dim); }
+#lobby input:focus { outline: none; border-color: var(--lb-cyan); box-shadow: 0 0 12px rgba(0,242,255,0.35); }
+
+.lobby-actions { display: flex; flex-direction: column; gap: 16px; }
+
+/* 薄邊框全息感按鈕:半透明底 + 冰銀藍邊,hover 轉青藍發光,active 閃金 */
+.lobby-btn {
+  position: relative;
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%;
+  background: rgba(22,27,41,0.6);
+  border: 1px solid var(--lb-border);
+  border-radius: 4px;
+  padding: 15px 20px;
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  box-shadow: none;
+  text-shadow: none;
+}
+.lobby-btn:hover {
+  border-color: var(--lb-cyan);
+  box-shadow: 0 0 15px rgba(0,242,255,0.4);
+  background: rgba(22,27,41,0.78);
+}
+.lobby-btn:hover .lb-label { transform: translateX(2px); }
+.lobby-btn:active { border-color: var(--lb-gold); transform: scale(0.98); }
+.lobby-btn:not(button) { cursor: default; }
+
+.lb-label {
+  font-family: "Noto Serif TC", serif;
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: 3px;
+  color: var(--lb-ink);
+  transition: transform 0.18s ease;
+}
+button.lobby-btn { text-align: left; }
+
+.lb-icon { width: 26px; height: 26px; flex-shrink: 0; opacity: 0.85; position: relative; }
+.lb-icon::before, .lb-icon::after { content: ""; position: absolute; }
+.lb-icon-sun { border: 1px solid var(--lb-gold); border-radius: 50%; }
+.lb-icon-sun::before { inset: 6px; border: 1px solid var(--lb-gold); border-radius: 50%; content: ""; position: absolute; }
+.lb-icon-eye {
+  border: 1px solid var(--lb-border); border-radius: 50%;
+}
+.lb-icon-eye::before {
+  inset: 8px; background: var(--lb-cyan); border-radius: 50%; opacity: 0.8;
+}
+.lb-icon-veil {
+  border: 1px solid var(--lb-border); border-radius: 50%;
+}
+.lb-icon-veil::before {
+  inset: 4px; border: 1px solid rgba(160,196,255,0.5); border-radius: 50%;
+}
+
+/* 加入房間:輸入框跟按鈕合併在同一張卡片內,呼應原設計「一顆按鈕一個功能」但保留代碼輸入 */
+.lobby-btn-join { flex-direction: column; align-items: stretch; gap: 10px; cursor: default; }
+.lobby-btn-join #codeInput {
+  border: 1px solid rgba(160,196,255,0.35);
+  background: rgba(10,14,26,0.5);
+  padding: 9px 12px;
+  font-size: 13px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.lb-join-trigger {
+  display: flex; align-items: center; justify-content: space-between;
+  background: none; border: none; padding: 0; margin: 0;
+  box-shadow: none; text-shadow: none;
+  cursor: pointer;
+}
+.lb-join-trigger:hover .lb-label { transform: translateX(2px); color: var(--lb-cyan); }
+.lb-join-trigger:active { transform: none; }
+
+.lobby-btn-ai { flex-direction: column; align-items: stretch; gap: 12px; cursor: default; }
+.lb-row { display: flex; align-items: center; justify-content: space-between; }
+
+.diff-buttons { display: flex; gap: 4px; justify-content: center; border-top: 1px solid rgba(136,146,176,0.2); padding-top: 10px; }
+.diff-buttons button {
+  flex: 1;
+  background: none;
+  border: none;
+  box-shadow: none;
+  text-shadow: none;
+  color: var(--lb-dim);
+  font-family: "Noto Sans TC", sans-serif;
+  font-size: 12px;
+  letter-spacing: 2px;
+  padding: 4px 6px;
+  border-radius: 0;
+}
+.diff-buttons button.active { color: var(--lb-cyan); }
+.diff-buttons button:hover { color: var(--lb-ink); filter: none; }
+.diff-buttons button:active { transform: none; }
+
+.lobby-screen .msg { color: #ff8f8f; font-size: 13px; margin-top: 14px; min-height: 18px; }
+
+.lobby-tagline {
+  margin-top: 30px;
+  font-family: "Noto Serif TC", serif;
+  font-size: 12px;
+  line-height: 1.8;
+  letter-spacing: 2px;
+  color: var(--lb-dim);
+  opacity: 0.75;
+}
+
+@media (max-width: 760px) {
+  .lobby-starmap { opacity: 0.4; width: 110vw; height: 110vw; right: -40%; }
+  .lobby-left { margin: 0 auto; padding: 36px 22px 28px; width: 100%; max-width: 420px; }
+}
 
 .room-code {
   font-size: 42px;

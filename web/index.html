@@ -4,35 +4,75 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>猜☆拳☆王</title>
-<link rel="stylesheet" href="style.css?v=33">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=35">
 </head>
 <body>
 
-<div id="lobby" class="screen">
-  <h1>猜☆拳☆王</h1>
-  <p class="subtitle">雙人連線版</p>
-  <input id="nameInput" type="text" placeholder="輸入你的名字" maxlength="12">
-  <div class="lobby-actions">
-    <div class="lobby-card">
-      <h3>建立新房間</h3>
-      <button id="createBtn">建立房間</button>
-    </div>
-    <div class="lobby-card">
-      <h3>加入房間</h3>
-      <input id="codeInput" type="text" placeholder="房間代碼" maxlength="5">
-      <button id="joinBtn">加入房間</button>
-    </div>
-    <div class="lobby-card">
-      <h3>單人對戰 AI</h3>
-      <div class="diff-buttons">
-        <button data-diff="easy" class="diffBtn">簡單</button>
-        <button data-diff="normal" class="diffBtn">普通</button>
-        <button data-diff="hard" class="diffBtn">困難</button>
-      </div>
-    </div>
+<div id="lobby" class="screen lobby-screen">
+  <div class="lobby-frame" aria-hidden="true">
+    <span class="lf-corner lf-tl"></span><span class="lf-corner lf-tr"></span>
+    <span class="lf-corner lf-bl"></span><span class="lf-corner lf-br"></span>
   </div>
-  <div id="lobbyMsg" class="msg"></div>
-  <button id="rulesBtnLobby" class="link-btn" onclick="showRules()">規則說明</button>
+  <div class="lobby-starmap" aria-hidden="true"></div>
+
+  <div class="lobby-left">
+    <div class="lobby-brand">
+      <svg class="lobby-compass" viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r="46" class="lc-ring lc-ring-dash"/>
+        <circle cx="50" cy="50" r="34" class="lc-ring"/>
+        <g class="lc-star">
+          <path d="M50 6 L57 43 L94 50 L57 57 L50 94 L43 57 L6 50 L43 43 Z"/>
+        </g>
+        <circle cx="50" cy="50" r="3.2" class="lc-core"/>
+      </svg>
+      <h1>猜<span class="lb-sep">☆</span>拳<span class="lb-sep">☆</span>王</h1>
+      <p class="subtitle">雙人連線版・占卜對決</p>
+      <div class="lobby-divider"><span></span><i class="ld-dot">◈</i><span></span></div>
+    </div>
+
+    <div class="lobby-name-row">
+      <input id="nameInput" type="text" placeholder="輸入你的名字" maxlength="12">
+    </div>
+
+    <div class="lobby-actions">
+      <button id="createBtn" class="lobby-btn">
+        <span class="lb-label">建立房間</span>
+        <span class="lb-icon lb-icon-sun"></span>
+      </button>
+
+      <div class="lobby-btn lobby-btn-join">
+        <input id="codeInput" type="text" placeholder="房間代碼" maxlength="5">
+        <button id="joinBtn" class="lb-join-trigger">
+          <span class="lb-label">加入房間</span>
+          <span class="lb-icon lb-icon-eye"></span>
+        </button>
+      </div>
+
+      <div class="lobby-btn lobby-btn-ai">
+        <div class="lb-row">
+          <span class="lb-label">單人對戰 AI</span>
+          <span class="lb-icon lb-icon-veil"></span>
+        </div>
+        <div class="diff-buttons">
+          <button data-diff="easy" class="diffBtn">簡單</button>
+          <button data-diff="normal" class="diffBtn">普通</button>
+          <button data-diff="hard" class="diffBtn">困難</button>
+        </div>
+      </div>
+
+      <button id="rulesBtnLobby" class="lobby-btn" onclick="showRules()">
+        <span class="lb-label">規則說明</span>
+        <span class="lb-icon lb-icon-eye"></span>
+      </button>
+    </div>
+
+    <div id="lobbyMsg" class="msg"></div>
+
+    <p class="lobby-tagline">星辰銘記,吾等亦然。<br>THE STARS REMEMBER. SO DO WE.</p>
+  </div>
 </div>
 
 <div id="waiting" class="screen hidden">
@@ -123,9 +163,9 @@
 <script src="firebase-config.js"></script>
 <!-- ?v= 是手動版本號,每次改動 rules.js/engine.js/net.js/app.js/style.css 就要遞增,
      避免玩家瀏覽器快取到部署前的舊版程式碼、看不到最新的修正 -->
-<script src="rules.js?v=33"></script>
-<script src="engine.js?v=33"></script>
-<script src="net.js?v=33"></script>
-<script src="app.js?v=33"></script>
+<script src="rules.js?v=35"></script>
+<script src="engine.js?v=35"></script>
+<script src="net.js?v=35"></script>
+<script src="app.js?v=35"></script>
 </body>
 </html>
