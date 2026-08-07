@@ -86,6 +86,7 @@ async function init() {
     t.scrollTop = t.scrollHeight;
   };
   $("logCloseBtn").onclick = () => $("logOverlay").classList.add("hidden");
+  $("discardCloseBtn").onclick = () => $("discardOverlay").classList.add("hidden");
   $("copyCodeBtn").onclick = () => {
     navigator.clipboard.writeText(roomCode);
     $("copyCodeBtn").textContent = "已複製!";
@@ -238,6 +239,7 @@ function boardSnapshotFor(p, revealStar) {
     handSunCount: p.handSun.length,
     handMoonCount: p.handMoon.length,
     discardCount: p.discard.length,
+    discard: p.discard.slice(), // 棄牌區內容本來就是雙方都看得到的公開資訊,直接整份公開
     playedSun: p.playedSunCards.slice(),
     star: revealStar ? p.committedStar : null,
     // 只公開「這回合已經蓋牌了嗎」的是非值,不洩漏蓋了什麼,讓對手畫面能正確演出
@@ -1051,7 +1053,7 @@ function renderOppBand(container, snapshot) {
 
   row.appendChild(pileCardTile("太陽庫", snapshot.sunPileCount, "back_sun", null, true));
   row.appendChild(pileCardTile("月亮庫", snapshot.moonPileCount, "back_moon", null, true));
-  row.appendChild(pileChip("棄牌", snapshot.discardCount, "discard"));
+  row.appendChild(pileChip("棄牌", snapshot.discardCount, "discard", () => showDiscardPile(`${snapshot.name}的棄牌`, snapshot.discard || [])));
   container.appendChild(row);
 }
 
@@ -1119,15 +1121,44 @@ function renderMyBand(container, snapshot, privateData) {
     if (skipOpt) handEl.appendChild(skipTile(skipOpt.label, () => resolvePendingAsk(null)));
   }
   btmRow.appendChild(handEl);
-  btmRow.appendChild(pileChip("棄牌", snapshot.discardCount, "discard"));
+  btmRow.appendChild(pileChip("棄牌", snapshot.discardCount, "discard", () => showDiscardPile(`${myDisplayName(snapshot.name)}的棄牌`, snapshot.discard || [])));
   container.appendChild(btmRow);
 }
 
-function pileChip(label, count, kind) {
+// onOpen 給了才能點:棄牌區這種「唯讀查看」用途才需要,其他 chip(目前沒有別的用途)維持原樣不能點。
+function pileChip(label, count, kind, onOpen) {
   const el = document.createElement("div");
-  el.className = `chip chip-${kind}`;
+  el.className = `chip chip-${kind}` + (onOpen ? " chip-tappable" : "");
   el.innerHTML = `<span class="chip-label">${label}</span><span class="chip-count">x${count}</span>`;
+  if (onOpen) {
+    el.setAttribute("role", "button");
+    el.setAttribute("tabindex", "0");
+    el.setAttribute("aria-label", `查看${label}`);
+    el.onclick = onOpen;
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); }
+    });
+  }
   return el;
+}
+
+// 棄牌區查看:雙方的棄牌本來就是公開資訊,點開來看已經打出過哪些太陽/月亮卡。
+// 每張縮圖沿用手牌的長按看效果機制(handCardTile 不給 onTap 時就是「純展示可查」模式)。
+function showDiscardPile(title, cards) {
+  $("discardOverlayTitle").textContent = title;
+  const grid = $("discardOverlayGrid");
+  grid.innerHTML = "";
+  if (!cards.length) {
+    const empty = document.createElement("p");
+    empty.className = "dim discard-empty";
+    empty.textContent = "(還沒有棄牌)";
+    grid.appendChild(empty);
+  } else {
+    cards.forEach((name) => {
+      grid.appendChild(handCardTile(name, cardKind(name), null, null));
+    });
+  }
+  $("discardOverlay").classList.remove("hidden");
 }
 
 // drawValue: 非空字串("太陽"/"月亮")時,這個牌堆可以用向下滑動的手勢抽牌
