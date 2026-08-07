@@ -836,30 +836,59 @@ button.lobby-btn { text-align: left; }
 }
 .slot-card-img.fx-evolve-pulse { animation: evolvePulse 1s ease-out; }
 
+/* 全螢幕金色暈染:變身瞬間先讓整個畫面「咚」一下引導視線,比只在小小的星星格子裡
+   做效果明顯得多,呼應「這是本回合戰力真的改變的時刻」的份量。 */
+.evolve-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 958;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 55%, rgba(232,178,58,0.22) 0%, rgba(232,178,58,0.10) 35%, rgba(5,7,13,0) 68%);
+  opacity: 0;
+  animation: evolveVignetteFlash 0.9s ease-out forwards;
+}
+@keyframes evolveVignetteFlash {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.evolve-flash {
+  position: fixed;
+  z-index: 959;
+  pointer-events: none;
+  animation: evolveFlashPop 0.75s ease-out forwards;
+}
+@keyframes evolveFlashPop {
+  0% { opacity: 0; transform: scale(0.5) rotate(0deg); }
+  25% { opacity: 1; transform: scale(1.15) rotate(8deg); }
+  100% { opacity: 0; transform: scale(1.4) rotate(14deg); }
+}
+
 .evolve-overlay {
   position: fixed;
   z-index: 960;
   border-radius: 6px;
   pointer-events: none;
   opacity: 0;
-  animation: evolveOverlayFade 1.15s ease-out forwards;
-  filter: drop-shadow(0 0 16px rgba(232, 178, 58, 0.85));
+  animation: evolveOverlayFade 1.6s cubic-bezier(.2,.9,.3,1) forwards;
+  filter: drop-shadow(0 0 22px rgba(232, 178, 58, 0.9));
 }
 @keyframes evolveOverlayFade {
-  0% { opacity: 0; transform: scale(0.88); }
-  18% { opacity: 1; transform: scale(1.1); }
-  35% { opacity: 1; transform: scale(1); }
-  78% { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(1.03); }
+  0% { opacity: 0; transform: scale(0.6) rotate(-8deg); }
+  20% { opacity: 1; transform: scale(1.25) rotate(3deg); }
+  38% { opacity: 1; transform: scale(1.08) rotate(0deg); }
+  82% { opacity: 1; transform: scale(1.08) rotate(0deg); }
+  100% { opacity: 0; transform: scale(1.15) rotate(0deg); }
 }
 
 .evolve-beam {
   position: fixed;
   z-index: 955;
-  height: 4px;
+  height: 6px;
   transform-origin: 0 50%;
   background: linear-gradient(90deg, rgba(232,178,58,0), rgba(255,224,140,0.95), rgba(232,178,58,0));
-  box-shadow: 0 0 14px 3px rgba(232, 178, 58, 0.7);
+  box-shadow: 0 0 18px 4px rgba(232, 178, 58, 0.8);
   pointer-events: none;
   opacity: 0;
   animation: evolveBeamFlash 0.7s ease-out forwards;
@@ -871,7 +900,7 @@ button.lobby-btn { text-align: left; }
   100% { opacity: 0; transform: scaleX(1); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .evolve-overlay, .evolve-beam { animation: none; opacity: 0; }
+  .evolve-overlay, .evolve-beam, .evolve-vignette, .evolve-flash { animation: none; opacity: 0; }
 }
 
 @keyframes battleWin {
@@ -923,6 +952,36 @@ button.lobby-btn { text-align: left; }
   0% { transform: scale(0.25); opacity: 0.9; }
   70% { opacity: 0.5; }
   100% { transform: scale(1); opacity: 0; }
+}
+
+/* 型別碰撞美術(石頭碎裂/剪刀劈砍/布纖維噴散),疊在 clash-shock 光環上面(見 spawnImpactBurst)。
+   閃光先炸開快速淡出,型別圖疊在上面停留久一點,兩者都跟 DOM 重繪脫鉤直接貼在 body 上。 */
+.impact-burst {
+  position: fixed;
+  z-index: 952;
+  pointer-events: none;
+  object-fit: contain;
+}
+.impact-burst-flash {
+  animation: impactFlashPop 0.4s ease-out forwards;
+}
+@keyframes impactFlashPop {
+  0% { opacity: 0; transform: scale(0.4); }
+  25% { opacity: 1; transform: scale(1.15); }
+  100% { opacity: 0; transform: scale(1.35); }
+}
+.impact-burst-type {
+  z-index: 953;
+  animation: impactTypePop 0.65s cubic-bezier(.15,.8,.3,1) forwards;
+}
+@keyframes impactTypePop {
+  0% { opacity: 0; transform: scale(0.5) rotate(-6deg); }
+  20% { opacity: 1; transform: scale(1.1) rotate(2deg); }
+  45% { opacity: 1; transform: scale(1) rotate(0deg); }
+  100% { opacity: 0; transform: scale(1.08) rotate(0deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .impact-burst { animation: none; opacity: 0; }
 }
 
 /* 分出勝負瞬間,戰場面板小小震一下,加強撞擊感 */
@@ -1012,7 +1071,8 @@ button.lobby-btn { text-align: left; }
 /* 不綁 .hand-card:對手區的星星剩量是小數字格,不是卡圖,也要能接收這個動畫 */
 .fx-absorb-receive { animation: absorbReceive 0.4s ease-out; position: relative; z-index: 3; }
 
-/* 開場硬幣:決定先攻/後攻 */
+/* 開場硬幣:決定先攻/後攻。兩面美術是固定的(正面太陽紋章、反面月亮紋章),
+   跟「誰先攻」無關,純粹是硬幣的兩面花紋不同;玩家名字疊在紋章下方留白的銘牌區。 */
 .coin-flip-box {
   display: flex;
   flex-direction: column;
@@ -1021,8 +1081,8 @@ button.lobby-btn { text-align: left; }
 }
 .coin-stage {
   perspective: 700px;
-  width: 120px;
-  height: 120px;
+  width: 156px;
+  height: 156px;
   position: relative;
 }
 .coin-stage::before {
@@ -1049,19 +1109,22 @@ button.lobby-btn { text-align: left; }
   inset: 0;
   border-radius: 50%;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
   backface-visibility: hidden;
   font-weight: bold;
-  font-size: 15px;
+  font-size: 13px;
   text-align: center;
-  padding: 8px;
-  color: #2a2200;
-  background: radial-gradient(circle at 35% 30%, #ffe9a8, #ffd35c 55%, #d9a72e 100%);
-  border: 3px solid #a97e1d;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+  padding: 0 14% 20%;
+  color: #4a3410;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+  background-image: url("img/coin_face_sun.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  filter: drop-shadow(0 6px 14px rgba(0,0,0,0.55));
 }
-.coin-back { transform: rotateY(180deg); }
+.coin-back { background-image: url("img/coin_face_moon.png"); transform: rotateY(180deg); }
 @keyframes coinSpinFront {
   0% { transform: rotateY(0deg) translateY(0) scale(1); }
   50% { transform: rotateY(900deg) translateY(-46px) scale(1.05); }

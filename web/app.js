@@ -481,6 +481,10 @@ function delayForLogLine(text) {
   // 揭示改成「停一拍 → 先攻翻 → 後攻翻」,加上翻牌動畫本身放慢到 1.05s,
   // 這裡要留夠時間讓整段演完,不然會被下一行 log 切斷
   else if (/揭示星星:/.test(text)) extra = 950;
+  // 升級卡(殞石頭/雷射剪刀/鈦合金布)有機會觸發變身特效(全螢幕暈染+閃光+放大卡圖,約 1.9s),
+  // 不確定這次有沒有真的升級成功(型別不符會直接丟棄、沒有特效),但抓最長的情況預留時間,
+  // 避免特效播到一半就被下一行 log 切斷、或被下一個提示畫面蓋住。
+  else if (/打出太陽卡:(殞石頭|雷射剪刀|鈦合金布)/.test(text)) extra = 1900;
   else if (/打出太陽卡:/.test(text) || /打出【烈陽】!$/.test(text)) extra = 700; // 對手出牌有飛入動畫 + 放慢後的發光
   else if (/發動【.+】/.test(text)) extra = 1500; // 月亮卡改成原地翻開再亮特效,要更久
   else if (/(抽牌|抽了一張牌)。$/.test(text)) extra = 1050; // 抽牌儀式(放大置中→飛進手牌)要多留時間播完
@@ -502,6 +506,43 @@ function spawnShockwave(targetEl, variant) {
   setTimeout(() => ring.remove(), 650);
 }
 
+// 型別對應的碰撞美術:石頭碎裂/剪刀劈砍火花/布纖維噴散,疊在既有的 clash-shock 光環之上,
+// 讓「這是石頭 vs 剪刀」有具體的打擊畫面,不再每次都只是同一圈光。
+const IMPACT_TYPE_SRC = { "石頭": "img/impact_rock.png", "剪刀": "img/impact_scissor.png", "布": "img/impact_cloth.png" };
+const IMPACT_FLASH_SRC = "img/impact_flash.png";
+
+// starType 給了才疊型別專屬圖(平手時兩邊型別一定相同,勝負時用贏家的型別);
+// 都跟 spawnShockwave 一樣算好座標貼在 body 上,不受戰場重繪打斷。
+function spawnImpactBurst(targetEl, starType) {
+  if (!targetEl) return;
+  const rect = targetEl.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+
+  const place = (img, size) => {
+    img.style.left = `${cx - size / 2}px`;
+    img.style.top = `${cy - size / 2}px`;
+    img.style.width = `${size}px`;
+    img.style.height = `${size}px`;
+    document.body.appendChild(img);
+    setTimeout(() => img.remove(), 700);
+  };
+
+  const flash = document.createElement("img");
+  flash.src = IMPACT_FLASH_SRC;
+  flash.alt = "";
+  flash.className = "impact-burst impact-burst-flash";
+  place(flash, rect.width * 2.4);
+
+  const typeSrc = starType && IMPACT_TYPE_SRC[starType];
+  if (typeSrc) {
+    const chip = document.createElement("img");
+    chip.src = typeSrc;
+    chip.alt = "";
+    chip.className = "impact-burst impact-burst-type";
+    place(chip, rect.width * 3.2);
+  }
+}
+
 // 太陽卡升級成功時的「變身」特效:星星欄位本身的美術不會真的換掉(下一次
 // renderBattlefield 一樣畫回原本的石頭/布/剪刀),這裡用一張蓋在最上層、跟畫面
 // 重繪脫鉤的浮動 img 做「原圖 → 進化圖」的短暫閃現,搭配從太陽欄位射向星星欄位的
@@ -510,24 +551,46 @@ function spawnShockwave(targetEl, variant) {
 function playEvolveEffect(starTargetEl, sunTargetEl, evolvedCardName) {
   if (!starTargetEl) return;
   const rect = starTargetEl.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
 
+  // 全螢幕金色暈染一閃,把玩家視線先拉過來,再讓底下的星星欄位變身——
+  // 之前只在星星格子本身做效果,範圍太小、太容易被忽略,加這層當「事件發生了」的明確訊號。
+  const vignette = document.createElement("div");
+  vignette.className = "evolve-vignette";
+  document.body.appendChild(vignette);
+  setTimeout(() => vignette.remove(), 900);
+
+  // 用戰鬥碰撞同一套白熱閃光素材,疊在星星格中心當「能量灌注」的爆發底圖
+  const flash = document.createElement("img");
+  flash.src = IMPACT_FLASH_SRC;
+  flash.alt = "";
+  flash.className = "evolve-flash";
+  const flashSize = rect.width * 2.8;
+  flash.style.left = `${cx - flashSize / 2}px`;
+  flash.style.top = `${cy - flashSize / 2}px`;
+  flash.style.width = `${flashSize}px`;
+  flash.style.height = `${flashSize}px`;
+  document.body.appendChild(flash);
+  setTimeout(() => flash.remove(), 750);
+
+  // 進化後卡圖本體:比原本卡格明顯放大,強調「這張牌質變了」,不再只是同尺寸換圖
+  const overlaySize = rect.width * 1.55;
   const overlay = document.createElement("img");
   overlay.src = cardImgSrc(evolvedCardName);
   overlay.alt = "";
   overlay.className = "evolve-overlay";
-  overlay.style.left = `${rect.left}px`;
-  overlay.style.top = `${rect.top}px`;
-  overlay.style.width = `${rect.width}px`;
-  overlay.style.height = `${rect.height}px`;
+  overlay.style.left = `${cx - overlaySize / 2}px`;
+  overlay.style.top = `${cy - overlaySize / 2}px`;
+  overlay.style.width = `${overlaySize}px`;
+  overlay.style.height = `${overlaySize * (rect.height / rect.width)}px`;
   document.body.appendChild(overlay);
-  setTimeout(() => overlay.remove(), 1150);
+  setTimeout(() => overlay.remove(), 1650);
 
   if (sunTargetEl) {
     const sunRect = sunTargetEl.getBoundingClientRect();
     const x1 = sunRect.left + sunRect.width / 2, y1 = sunRect.top + sunRect.height / 2;
-    const x2 = rect.left + rect.width / 2, y2 = rect.top + rect.height / 2;
-    const len = Math.hypot(x2 - x1, y2 - y1);
-    const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+    const len = Math.hypot(cx - x1, cy - y1);
+    const angle = Math.atan2(cy - y1, cx - x1) * 180 / Math.PI;
     const beam = document.createElement("div");
     beam.className = "evolve-beam";
     beam.style.left = `${x1}px`;
@@ -540,6 +603,7 @@ function playEvolveEffect(starTargetEl, sunTargetEl, evolvedCardName) {
 
   spawnShockwave(starTargetEl, "sun");
   fx(starTargetEl, "fx-evolve-pulse");
+  fx($("battlefield"), "fx-shake");
 }
 
 function fx(el, cls) {
@@ -919,7 +983,7 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
       const evo = SUN_EVOLVE[card];
       const didEvolve = evo && evo[0] === (pub[key] || {}).star;
       const evolveFx = didEvolve ? () => {
-        setTimeout(() => playEvolveEffect(starImg(col), target, evo[1]), 350);
+        setTimeout(() => playEvolveEffect(starImg(col), target, evo[1]), 250);
       } : null;
       if (isOpp) flyCardIn(bandPileTileImg($("oppBand"), "太陽手牌"), target, card, () => { fx(target, "fx-sun"); if (burst) burst(); if (evolveFx) evolveFx(); });
       else { fx(target, "fx-sun"); if (burst) burst(); if (evolveFx) evolveFx(); }
@@ -963,10 +1027,12 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
       const winCol = winnerIsOpp ? oppCol : mineCol;
       const loseCol = winnerIsOpp ? mineCol : oppCol;
       const winImg = starImg(winCol), loseImg = starImg(loseCol);
+      const winnerStarType = (winnerIsOpp ? pub[oppKey] : pub[mineKey]) && (winnerIsOpp ? pub[oppKey] : pub[mineKey]).star;
       if (winImg) {
         winImg.style.setProperty("--bump-dir", winnerIsOpp ? "10px" : "-10px");
         fx(winImg, "fx-win");
         spawnShockwave(winImg, "win");
+        spawnImpactBurst(winImg, winnerStarType);
       }
       if (loseImg) { loseImg.style.setProperty("--bump-dir", winnerIsOpp ? "-10px" : "10px"); fx(loseImg, "fx-lose"); }
       fx($("battlefield"), "fx-shake");
@@ -974,6 +1040,7 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
       fx(starImg(oppCol), "fx-tie");
       fx(starImg(mineCol), "fx-tie");
       spawnShockwave(starImg(oppCol), "tie");
+      spawnImpactBurst(starImg(oppCol), (pub[oppKey] || {}).star);
       fx($("battlefield"), "fx-shake");
     }
 
