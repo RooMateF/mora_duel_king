@@ -183,6 +183,23 @@ class Game {
     await this.ui.log(`${player.name} 從${pile}牌庫抽了一張牌。`);
   }
 
+  // 雙人連線限時 60 秒出牌逾時的懲罰:強制從太陽或月亮牌庫「隨機」抽一張(不給選,
+  // 這是懲罰不是獎勵)。兩堆都有牌時真的擲亂數決定,只有一堆時就從那堆抽。
+  // 跟其他抽牌函式(mandatoryDraw/forceDraw/freeDrawOne)一樣的慣例:兩堆都空 → 判負。
+  async penaltyDrawForTimeout(player, opponent) {
+    const hasSun = player.sunPile.length > 0;
+    const hasMoon = player.moonPile.length > 0;
+    if (!hasSun && !hasMoon) {
+      await this.ui.log(`${player.name} 逾時懲罰:太陽與月亮牌庫皆空,無法抽牌 —— 判負!`);
+      throw new GameOverError(opponent.role);
+    }
+    const pile = hasSun && hasMoon ? (Math.random() < 0.5 ? "太陽" : "月亮") : (hasSun ? "太陽" : "月亮");
+    const pileList = pile === "太陽" ? player.sunPile : player.moonPile;
+    const hand = pile === "太陽" ? player.handSun : player.handMoon;
+    hand.push(pileList.pop());
+    await this.ui.log(`${player.name} 逾時未在時限內決定,強制從${pile}牌庫隨機抽了一張牌作為懲罰。`);
+  }
+
   async eclipseBonusDraw(defender, attacker) {
     let target;
     if (this.isAiControlled(defender)) {

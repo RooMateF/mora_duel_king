@@ -13,6 +13,12 @@ let logTotal = 0;
 let lastPublicSeen = null;
 let lastPrivateSeen = null;
 let pendingAsk = null; // { title, prompt, options, kind, resolve } — 待處理的「打牌」決策
+
+// 出牌限時倒數的共用截止時間:不管是房主(p1)還是加入者(p2)正在決策,都只有這一份,
+// 由房主的 makeUi().ask() 統一設定/清除並發布給雙方,兩邊看到的是同一份倒數,
+// 不再各自算各自的(見下方 syncTurnTimerDisplay)。只有房主端會真的寫這兩個變數。
+let pendingTurnDeadline = null;
+let pendingTurnRole = null;
 let lastDifficulty = "normal"; // 結算畫面「再戰一次」要沿用同一個難度
 
 // 各模式啟動時會覆寫這個函式,讓它去抓「當下最新的」狀態來重畫,而不是重播 lastPublicSeen 這個舊快照。
@@ -153,8 +159,8 @@ function startGuest() {
     if (lastPublicSeen) renderPublic(lastPublicSeen);
   });
   Net.listenRpcRequest(roomCode, myUid, async (req) => {
-    const value = await showLocalModal(req.title, req.prompt, req.options, req.kind);
-    await Net.sendRpcResponse(roomCode, myUid, req.id, value);
+    const { value, timedOut } = await showLocalModal(req.title, req.prompt, req.options, req.kind);
+    await Net.sendRpcResponse(roomCode, myUid, req.id, value, timedOut);
   });
 }
 
@@ -187,8 +193,8 @@ function startHostGame(hostName, guestName, guestUid) {
     if (lastPublicSeen) renderPublic(lastPublicSeen);
   });
   Net.listenRpcRequest(roomCode, myUid, async (req) => {
-    const value = await showLocalModal(req.title, req.prompt, req.options, req.kind);
-    await Net.sendRpcResponse(roomCode, myUid, req.id, value);
+    const { value, timedOut } = await showLocalModal(req.title, req.prompt, req.options, req.kind);
+    await Net.sendRpcResponse(roomCode, myUid, req.id, value, timedOut);
   });
 
   runGameLoop(guestUid);
@@ -196,16 +202,37 @@ function startHostGame(hostName, guestName, guestUid) {
 
 function makeUi(guestUid) {
   async function ask(role, title, prompt, options, kind, onResolved) {
-    let value;
+    let value, timedOut = false;
+    // 不管這次要問的是 p1 還是 p2,都先發布同一份倒數截止時間,雙方畫面上的
+    // 倒數才會同步(對手決策時我也看得到剩幾秒,反過來也一樣)。用 update() 而不是
+    // 整份 publishState(),成本低很多 —— 不用整份戰場快照跟著這個小事件重傳一次。
+    pendingTurnDeadline = Date.now() + TURN_LIMIT_MS;
+    pendingTurnRole = role;
+    Net.publishTurnDeadline(roomCode, pendingTurnDeadline, role).catch(() => {
+      /* 規則沒部署或短暫斷線都不該卡住遊戲,倒數同步失敗只是對手看不到、不影響自己這邊的限時 */
+    });
     if (role === "p1") {
-      value = await showLocalModal(title, prompt, options, kind);
+      const r = await showLocalModal(title, prompt, options, kind);
+      value = r.value;
+      timedOut = r.timedOut;
     } else {
       const id = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : String(Math.random());
       await Net.sendRpcRequest(roomCode, guestUid, {
         id, title, prompt, kind,
         options: options.map((o) => ({ label: o.label, value: (o.value === undefined ? null : o.value) })),
       });
-      value = await Net.waitRpcResponse(roomCode, guestUid, id);
+      const resp = await Net.waitRpcResponse(roomCode, guestUid, id);
+      value = resp.value;
+      timedOut = !!resp.timedOut;
+    }
+    pendingTurnDeadline = null;
+    pendingTurnRole = null;
+    // 逾時懲罰:強制隨機抽一張太陽或月亮牌。這裡呼叫 game.byRole/other 而不是自己算,
+    // 跟引擎共用同一套角色查詢邏輯;真正的抽牌/判負規則留在 engine.js(跟其他抽牌
+    // 函式一起維護),這裡只負責「偵測到逾時就觸發」。
+    if (timedOut) {
+      const timedOutPlayer = game.byRole(role);
+      await game.penaltyDrawForTimeout(timedOutPlayer, game.other(timedOutPlayer));
     }
     // 引擎要先把這次選擇的結果寫回 player 物件,畫面才不會照舊狀態畫一次
     if (onResolved) onResolved(value);
@@ -261,6 +288,12 @@ function buildHostPub() {
     logSeq: logTotal,
     winnerRole: null,
     updatedAt: Date.now(),
+    // 正常情況下這兩個欄位在「完整重傳」的這一刻一定是 null:出牌限時倒數是靠
+    // Net.publishTurnDeadline() 的輕量 update() 另外發布的,跟這裡的完整快照
+    // 不會同時進行(ask() 內部先清空這兩個變數,才會走到後面觸發完整重傳的那一步)。
+    // 這裡仍然帶著寫,是避免日後改動順序時漏掉、讓完整重傳把倒數狀態覆蓋掉。
+    turnDeadline: pendingTurnDeadline || null,
+    turnRole: pendingTurnRole || null,
   };
 }
 
@@ -326,7 +359,8 @@ function startSinglePlayer(difficulty) {
 
 function makeLocalUi() {
   async function ask(_role, title, prompt, options, kind, onResolved) {
-    const value = await showLocalModal(title, prompt, options, kind);
+    // 單人對戰沒有 roomCode,showLocalModal 內部一定走「非連線」分支,timedOut 恆為 false
+    const { value } = await showLocalModal(title, prompt, options, kind);
     // 引擎要先把這次選擇的結果寫回 player 物件,畫面才不會照舊狀態畫一次
     if (onResolved) onResolved(value);
     renderLocalState();
@@ -397,6 +431,7 @@ function renderPublic(pub) {
   renderBand($("myBand"), pub[mineKey], false, lastPrivateSeen);
   renderBattlefield(pub, oppKey, mineKey);
   syncDrawPickOverlay();
+  syncTurnTimerDisplay(pub);
   renderLog(pub.log || []);
   if (!prevPub && pub.round === 1) showCoinFlip(pub);
   triggerBattleEffects(prevPub, pub, oppKey, mineKey);
@@ -2035,7 +2070,6 @@ const CARD_PICK_KINDS = ["star", "sun", "moonCommit", "moonActivate", "drawPile"
 // 「最不傷」的選項:有「不打/略過」就略過,沒有的話(星星、抽牌是強制的)選第一個。
 const TURN_LIMIT_MS = 60000;
 let turnTimerId = null;
-let turnTickId = null;
 
 function isOnlineMatch() {
   return !!roomCode;
@@ -2048,39 +2082,33 @@ function defaultChoiceFor(options) {
   return list.length ? list[0].value : null;
 }
 
+// 只管「時間到了要不要觸發逾時回呼」,不碰畫面 —— 倒數的視覺顯示改由
+// syncTurnTimerDisplay() 統一從房主發布的 pub.turnDeadline 算,雙方(不管是自己
+// 還是對手正在決策)都用同一份時間源,不再各自維護一份局部倒數畫面。
 function stopTurnTimer() {
   if (turnTimerId) { clearTimeout(turnTimerId); turnTimerId = null; }
-  if (turnTickId) { clearInterval(turnTickId); turnTickId = null; }
-  const el = $("turnTimer");
-  if (el) el.classList.add("hidden");
 }
 
 function startTurnTimer(onTimeout) {
   stopTurnTimer();
-  const el = $("turnTimer");
-  const deadline = Date.now() + TURN_LIMIT_MS;
-  const paint = () => {
-    const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
-    el.textContent = `⏱ ${left}`;
-    el.classList.toggle("urgent", left <= 10);
-  };
-  el.classList.remove("hidden");
-  paint();
-  turnTickId = setInterval(paint, 250);
   turnTimerId = setTimeout(onTimeout, TURN_LIMIT_MS);
 }
 
-// 把一個「等玩家決策」的 promise 包上限時:時間到就收掉畫面上的提示、改用預設值往下走
+// 把一個「等玩家決策」的 promise 包上限時:時間到就收掉畫面上的提示、改用預設值往下走。
+// 回傳 {value, timedOut} 而不是單純的 value —— 呼叫端(尤其是連線對戰裡負責把
+// 這次結果送回房主的加入者端)要知道「這次是不是逾時系統自動選的」,才能正確觸發
+// 逾時懲罰(強制抽一張牌)。逾時本身的紀錄/懲罰交給收到 timedOut 的那一端處理
+// (見 makeUi().ask()),這裡只負責「時間到了、UI 卡住的畫面要清乾淨」。
 function withTurnLimit(inner, options) {
   return new Promise((resolve) => {
     let settled = false;
-    const finish = (v) => {
+    const finish = (value, timedOut) => {
       if (settled) return;
       settled = true;
       stopTurnTimer();
-      resolve(v);
+      resolve({ value, timedOut });
     };
-    inner.then(finish);
+    inner.then((value) => finish(value, false));
     startTurnTimer(() => {
       const fallback = defaultChoiceFor(options);
       // 收掉還開著的決策 UI,否則遮罩/提示會卡在畫面上
@@ -2088,18 +2116,45 @@ function withTurnLimit(inner, options) {
       resetArmed();
       $("drawPickOverlay").classList.add("hidden");
       $("modalOverlay").classList.add("hidden");
-      pushLog(`(逾時 ${TURN_LIMIT_MS / 1000} 秒,自動選擇)`);
       if (lastPublicSeen) renderPublic(lastPublicSeen);
-      finish(fallback);
+      finish(fallback, true);
     });
   });
 }
 
+// 一律回傳 {value, timedOut} 這個形狀,不管連線與否 —— 呼叫端(makeUi/makeLocalUi
+// 的 ask())才能用同一種寫法處理,不用分兩套。單人對戰(非連線)沒有計時,
+// timedOut 恆為 false。
 function showLocalModal(title, prompt, options, kind) {
   const inner = CARD_PICK_KINDS.includes(kind)
     ? showCardPickUI(title, prompt, options, kind)
     : showTextModal(title, prompt, options);
-  return isOnlineMatch() ? withTurnLimit(inner, options) : inner;
+  return isOnlineMatch() ? withTurnLimit(inner, options) : inner.then((value) => ({ value, timedOut: false }));
+}
+
+// 頂部的「⏱ 秒數」倒數:不分是自己還是對手正在決策,兩邊都從房主發布的
+// pub.turnDeadline 算同一個時間點,天生就同步(不用額外做時鐘校正)。單人對戰的
+// pub 沒有這個欄位,自然不會顯示。
+let turnDisplayTickId = null;
+
+function syncTurnTimerDisplay(pub) {
+  const el = $("turnTimer");
+  if (!el) return;
+  if (turnDisplayTickId) { clearInterval(turnDisplayTickId); turnDisplayTickId = null; }
+  const deadline = pub && pub.turnDeadline;
+  if (!deadline || Date.now() >= deadline) {
+    el.classList.add("hidden");
+    return;
+  }
+  const paint = () => {
+    const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    el.textContent = `⏱ ${left}`;
+    el.classList.toggle("urgent", left <= 10);
+    if (left <= 0 && turnDisplayTickId) { clearInterval(turnDisplayTickId); turnDisplayTickId = null; }
+  };
+  el.classList.remove("hidden");
+  paint();
+  turnDisplayTickId = setInterval(paint, 250);
 }
 
 function showTextModal(title, prompt, options) {

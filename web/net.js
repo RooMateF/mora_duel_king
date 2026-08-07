@@ -100,11 +100,15 @@ const Net = (() => {
     return () => ref.off("value");
   }
 
-  async function sendRpcResponse(code, uid, id, value) {
-    await db.ref(`rooms/${code}/rpc/${uid}/response`).set({ id, value });
+  // timedOut:這次回應是不是「時間到,系統自動選的」而不是玩家真的選的 —— 呼叫端
+  // (makeUi.ask())要知道這件事才能觸發逾時懲罰(強制抽一張牌),並正確記錄紀錄。
+  async function sendRpcResponse(code, uid, id, value, timedOut) {
+    await db.ref(`rooms/${code}/rpc/${uid}/response`).set({ id, value, timedOut: !!timedOut });
     await db.ref(`rooms/${code}/rpc/${uid}/request`).remove();
   }
 
+  // 回傳整包 {id, value, timedOut},不再只回傳 value —— 呼叫端要看 timedOut 才能判斷
+  // 要不要觸發逾時懲罰。
   function waitRpcResponse(code, targetUid, id) {
     return new Promise((resolve) => {
       const ref = db.ref(`rooms/${code}/rpc/${targetUid}/response`);
@@ -112,11 +116,17 @@ const Net = (() => {
         const resp = snap.val();
         if (resp && resp.id === id) {
           ref.off("value", handler);
-          resolve(resp.value);
+          resolve(resp);
         }
       };
       ref.on("value", handler);
     });
+  }
+
+  // 出牌限時的共用倒數:輕量的 partial update,不用像 publishPublic 整份重傳
+  // (那份還包在完整戰場快照裡,一次寫入成本高很多)。deadline/role 為 null 代表清掉倒數。
+  function publishTurnDeadline(code, deadline, role) {
+    return db.ref(`rooms/${code}/public`).update({ turnDeadline: deadline || null, turnRole: role || null });
   }
 
   function myUidValue() {
@@ -176,7 +186,7 @@ const Net = (() => {
   return {
     init, signIn, createRoom, joinRoom, watchMeta, watchPublic,
     publishPublic, publishPrivate, watchPrivate,
-    sendRpcRequest, listenRpcRequest, sendRpcResponse, waitRpcResponse,
+    sendRpcRequest, listenRpcRequest, sendRpcResponse, waitRpcResponse, publishTurnDeadline,
     armRoomAutoDelete, cancelRoomAutoDelete, deleteRoom,
     indexRoom, sweepStaleRooms,
     myUid: myUidValue,
