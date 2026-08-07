@@ -1385,6 +1385,53 @@ function cardImgSrc(name) {
   return `cards/${encodeURIComponent(name)}.png?v=${CARD_ASSET_VERSION}`;
 }
 
+// ── 資源預載 ──────────────────────────────────────────────────────────────
+// <img src> 或 CSS background-image 都只有「真的被用到」才會發網路請求,所以大絕、
+// 碰撞特效、開場硬幣、結算畫面這些整局裡「第一次觸發才會用到」的圖,平常完全沒被
+// 抓過 —— 事件真的發生那一刻才臨時去下載+解碼,恰好就是最需要立刻顯示的瞬間卡一下。
+// 趁玩家還在大廳/想招式的空檔,用背景的 Image() 物件把全部素材先抓進瀏覽器的
+// HTTP 快取跟解碼快取(不管之後是被 <img> 還是 CSS url() 用到,快取都共用同一份),
+// 之後事件真正觸發時就是直接從快取秒開,不用重新走一次網路。
+// 這個函式故意放在檔案前段,實際引用到的常數(STAR_SOCKET_SRC、IMPACT_TYPE_SRC…)
+// 定義在後面也沒關係 —— 函式主體只有真正被呼叫時才會執行,而呼叫時機是 init(),
+// 那一定是在整份腳本(所有 const)都執行過一輪之後,不會有初始化順序的問題。
+function collectPreloadImagePaths() {
+  const paths = [];
+  Object.keys(CARD_EFFECTS).forEach((name) => paths.push(cardImgSrc(name)));
+  ["back_star", "back_sun", "back_moon"].forEach((name) => paths.push(cardImgSrc(name)));
+  paths.push(DECK_ART_SRC.back_sun, DECK_ART_SRC.back_moon);
+  Object.values(STAR_SOCKET_SRC.opp).forEach((p) => paths.push(p));
+  Object.values(STAR_SOCKET_SRC.mine).forEach((p) => paths.push(p));
+  Object.values(STAR_GLYPH_SRC).forEach((p) => paths.push(p));
+  Object.values(IMPACT_TYPE_SRC).forEach((p) => paths.push(p));
+  paths.push(IMPACT_FLASH_SRC);
+  // 硬幣正反面圖只透過 CSS background-image 使用,而且掛在預設 display:none 的
+  // overlay 裡,瀏覽器不會主動先抓;開場硬幣是每局第一件會播的動畫,不能讓它慢半拍。
+  paths.push("img/board_base_v2.jpg", "img/coin_face_sun.png", "img/coin_face_moon.png");
+  paths.push(ULTIMATE_SUN_FLARE_SRC, ULTIMATE_SUN_GROUNDCRACK_SRC, STEAL_CONJURE_PUFF_SRC, SPEED_STREAK_SRC);
+  ECLIPSE_CUTIN_SEQUENCE.forEach((f) => paths.push(f.src));
+  Object.values(GO_BG_SRC).forEach((p) => paths.push(p));
+  Object.values(GO_MEDALLION_SRC).forEach((p) => paths.push(p));
+  paths.push(GO_PARTICLE_SRC);
+  return paths;
+}
+
+// 保留每個 Image 物件的參照,避免被 GC 回收 —— 物件一旦被回收,連還在進行中的
+// 下載都可能被瀏覽器提前放棄,快取不到完整的圖。
+let preloadedImageRefs = [];
+
+function preloadAllImages() {
+  preloadedImageRefs = collectPreloadImagePaths().map((src) => {
+    const img = new Image();
+    img.src = src;
+    // decode() 把「解碼」也提前做完,不只是下載位元組 —— 大張的 JPEG(戰場背景、
+    // 日蝕分鏡、結算背景)光解碼就要花不少時間。部分瀏覽器沒有這個 API,
+    // 或圖片還沒被使用過就 decode() 可能 reject,兩種情況都不影響遊戲,直接吞掉即可。
+    if (img.decode) img.decode().catch(() => {});
+    return img;
+  });
+}
+
 // 星星型別的「底座」卡框(拳頭/手掌/剪刀),對應 battlefield_layout_slots_v2.png 的星星庫存列。
 // 依設計圖分區:對手側(上方)用深色底座、我方側(下方)用藍色底座。
 const STAR_SOCKET_SRC = {
@@ -2078,5 +2125,10 @@ function showRules() {
   $("rulesText").textContent = RULES_TEXT;
   $("rulesOverlay").classList.remove("hidden");
 }
+
+// 在這裡(腳本執行到最後、註冊完 DOMContentLoaded 監聽器之前)就先發動預載,
+// 不等 DOMContentLoaded 事件觸發 —— 反正 Image() 下載本來就是背景非同步進行,
+// 越早開始就越有機會在玩家填完名字/選完難度、真正進入對戰之前把快取都填好。
+preloadAllImages();
 
 document.addEventListener("DOMContentLoaded", init);
