@@ -419,7 +419,7 @@ function showCoinFlip(pub) {
     $("coinResultText").textContent = `${firstName} 先攻!`;
     fx($("coinResultText"), "pop");
   }, 1150);
-  setTimeout(() => { overlay.classList.add("hidden"); }, 1850);
+  setTimeout(() => { overlay.classList.add("hidden"); }, 2700);
 }
 
 const DIFF_LABEL = { easy: "簡單", normal: "普通", hard: "困難" };
@@ -475,7 +475,7 @@ function isRevealHeld(side) {
 function delayForLogLine(text) {
   if (/^\n===== 第 1 回合 =====/.test(text)) return 1900; // 等開場硬幣動畫播完
   let extra = 0;
-  if (/^★ .+ 贏得本回合!$/.test(text) || /^平手!/.test(text)) extra = 550;
+  if (/^★ .+ 贏得本回合!$/.test(text) || /^平手!/.test(text)) extra = 1400; // 碰撞特效(閃光+型別衝擊圖)要多留時間播完
   else if (/取走 .+ 的一張『.+』星星卡。/.test(text)) extra = 600; // 星星被吸走的動畫要多留一點時間
   else if (/ 蓋下星星卡。$/.test(text)) extra = 950; // 電腦先攻蓋星星卡:橫幅 + 蓋牌動畫要多留時間播完
   // 揭示改成「停一拍 → 先攻翻 → 後攻翻」,加上翻牌動畫本身放慢到 1.05s,
@@ -484,7 +484,7 @@ function delayForLogLine(text) {
   // 升級卡(殞石頭/雷射剪刀/鈦合金布)有機會觸發變身特效(全螢幕暈染+閃光+放大卡圖,約 1.9s),
   // 不確定這次有沒有真的升級成功(型別不符會直接丟棄、沒有特效),但抓最長的情況預留時間,
   // 避免特效播到一半就被下一行 log 切斷、或被下一個提示畫面蓋住。
-  else if (/打出太陽卡:(殞石頭|雷射剪刀|鈦合金布)/.test(text)) extra = 1900;
+  else if (/打出太陽卡:(殞石頭|雷射剪刀|鈦合金布)/.test(text)) extra = 2650;
   else if (/打出太陽卡:/.test(text) || /打出【烈陽】!$/.test(text)) extra = 700; // 對手出牌有飛入動畫 + 放慢後的發光
   else if (/發動【.+】/.test(text)) extra = 1500; // 月亮卡改成原地翻開再亮特效,要更久
   else if (/(抽牌|抽了一張牌)。$/.test(text)) extra = 1050; // 抽牌儀式(放大置中→飛進手牌)要多留時間播完
@@ -518,20 +518,20 @@ function spawnImpactBurst(targetEl, starType) {
   const rect = targetEl.getBoundingClientRect();
   const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
 
-  const place = (img, size) => {
+  const place = (img, size, lifespanMs) => {
     img.style.left = `${cx - size / 2}px`;
     img.style.top = `${cy - size / 2}px`;
     img.style.width = `${size}px`;
     img.style.height = `${size}px`;
     document.body.appendChild(img);
-    setTimeout(() => img.remove(), 700);
+    setTimeout(() => img.remove(), lifespanMs);
   };
 
   const flash = document.createElement("img");
   flash.src = IMPACT_FLASH_SRC;
   flash.alt = "";
   flash.className = "impact-burst impact-burst-flash";
-  place(flash, rect.width * 2.4);
+  place(flash, rect.width * 2.4, 750);
 
   const typeSrc = starType && IMPACT_TYPE_SRC[starType];
   if (typeSrc) {
@@ -539,7 +539,7 @@ function spawnImpactBurst(targetEl, starType) {
     chip.src = typeSrc;
     chip.alt = "";
     chip.className = "impact-burst impact-burst-type";
-    place(chip, rect.width * 3.2);
+    place(chip, rect.width * 3.2, 1350);
   }
 }
 
@@ -558,7 +558,7 @@ function playEvolveEffect(starTargetEl, sunTargetEl, evolvedCardName) {
   const vignette = document.createElement("div");
   vignette.className = "evolve-vignette";
   document.body.appendChild(vignette);
-  setTimeout(() => vignette.remove(), 900);
+  setTimeout(() => vignette.remove(), 1300);
 
   // 用戰鬥碰撞同一套白熱閃光素材,疊在星星格中心當「能量灌注」的爆發底圖
   const flash = document.createElement("img");
@@ -571,7 +571,7 @@ function playEvolveEffect(starTargetEl, sunTargetEl, evolvedCardName) {
   flash.style.width = `${flashSize}px`;
   flash.style.height = `${flashSize}px`;
   document.body.appendChild(flash);
-  setTimeout(() => flash.remove(), 750);
+  setTimeout(() => flash.remove(), 1100);
 
   // 進化後卡圖本體:比原本卡格明顯放大,強調「這張牌質變了」,不再只是同尺寸換圖
   const overlaySize = rect.width * 1.55;
@@ -584,7 +584,7 @@ function playEvolveEffect(starTargetEl, sunTargetEl, evolvedCardName) {
   overlay.style.width = `${overlaySize}px`;
   overlay.style.height = `${overlaySize * (rect.height / rect.width)}px`;
   document.body.appendChild(overlay);
-  setTimeout(() => overlay.remove(), 1650);
+  setTimeout(() => overlay.remove(), 2350);
 
   if (sunTargetEl) {
     const sunRect = sunTargetEl.getBoundingClientRect();
@@ -1032,9 +1032,14 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
         winImg.style.setProperty("--bump-dir", winnerIsOpp ? "10px" : "-10px");
         fx(winImg, "fx-win");
         spawnShockwave(winImg, "win");
-        spawnImpactBurst(winImg, winnerStarType);
       }
-      if (loseImg) { loseImg.style.setProperty("--bump-dir", winnerIsOpp ? "-10px" : "10px"); fx(loseImg, "fx-lose"); }
+      if (loseImg) {
+        loseImg.style.setProperty("--bump-dir", winnerIsOpp ? "-10px" : "10px");
+        fx(loseImg, "fx-lose");
+        // 石頭碎裂/剪刀斬擊這種型別專屬的碰撞美術是「贏家的招式打在輸家身上」,
+        // 所以疊圖位置要放輸家那張星星卡上,不是贏家自己這邊(贏家維持既有的金色勝利光環)。
+        spawnImpactBurst(loseImg, winnerStarType);
+      }
       fx($("battlefield"), "fx-shake");
     } else if (/^平手!/.test(line)) {
       fx(starImg(oppCol), "fx-tie");
