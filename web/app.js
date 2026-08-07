@@ -13,6 +13,7 @@ let logTotal = 0;
 let lastPublicSeen = null;
 let lastPrivateSeen = null;
 let pendingAsk = null; // { title, prompt, options, kind, resolve } — 待處理的「打牌」決策
+let lastDifficulty = "normal"; // 結算畫面「再戰一次」要沿用同一個難度
 
 // 各模式啟動時會覆寫這個函式,讓它去抓「當下最新的」狀態來重畫,而不是重播 lastPublicSeen 這個舊快照。
 // 這點很重要:引擎剛把某個狀態(例如 starsRevealed)寫回去、還沒來得及讓 log()/publishState 補一次
@@ -309,6 +310,7 @@ function startSinglePlayer(difficulty) {
   isHost = true;
   myRole = "p1";
   roomCode = null;
+  lastDifficulty = difficulty;
   resetLog();
   window.__gameOverShown = false;
   showScreen("gameScreen");
@@ -1660,11 +1662,60 @@ function renderLog(lines) {
   if (overlayOpen && wasAtBottom) panel.scrollTop = panel.scrollHeight;
 }
 
+const GO_BG_SRC = { win: "img/endscreen_victory_bg.jpg", lose: "img/endscreen_defeat_bg.jpg" };
+const GO_MEDALLION_SRC = { win: "img/endscreen_victory_medallion.png", lose: "img/endscreen_defeat_medallion.png" };
+const GO_PARTICLE_SRC = "img/endscreen_star_particle.png";
+const GO_PARTICLE_COUNT = 16;
+
+function spawnGoParticles() {
+  const box = $("goParticles");
+  box.innerHTML = "";
+  for (let i = 0; i < GO_PARTICLE_COUNT; i++) {
+    const img = document.createElement("img");
+    img.src = GO_PARTICLE_SRC;
+    img.className = "go-particle";
+    img.alt = "";
+    const size = 14 + Math.random() * 18;
+    img.style.setProperty("--gp-left", `${Math.random() * 100}%`);
+    img.style.setProperty("--gp-size", `${size}px`);
+    img.style.setProperty("--gp-dur", `${3.5 + Math.random() * 3}s`);
+    img.style.setProperty("--gp-delay", `${-Math.random() * 6}s`);
+    img.style.setProperty("--gp-drift", `${(Math.random() - 0.5) * 80}px`);
+    box.appendChild(img);
+  }
+}
+
 function showGameOver(winnerRole, pub) {
   if (window.__gameOverShown) return;
   window.__gameOverShown = true;
+  const amIWinner = winnerRole === myRole;
+  const result = amIWinner ? "win" : "lose";
   const name = winnerRole === "p1" ? pub.p1.name : pub.p2.name;
-  setTimeout(() => alert(`遊戲結束!獲勝者:${name}`), 50);
+
+  const overlay = $("gameOverOverlay");
+  overlay.dataset.result = result;
+  $("goBg").style.backgroundImage = `url(${GO_BG_SRC[result]})`;
+  $("goMedallion").src = GO_MEDALLION_SRC[result];
+  $("goResultText").textContent = amIWinner ? "勝利" : "落敗";
+  $("goWinnerName").textContent = `獲勝者:${name}`;
+  spawnGoParticles();
+
+  const isSinglePlayer = roomCode === null && game && game.vsAi;
+  const rematchBtn = $("goRematchBtn");
+  rematchBtn.classList.toggle("hidden", !isSinglePlayer);
+  if (isSinglePlayer) {
+    rematchBtn.onclick = () => {
+      overlay.classList.remove("go-show");
+      setTimeout(() => {
+        overlay.classList.add("hidden");
+        startSinglePlayer(lastDifficulty);
+      }, 200);
+    };
+  }
+  $("goLobbyBtn").onclick = () => location.reload();
+
+  overlay.classList.remove("hidden");
+  requestAnimationFrame(() => overlay.classList.add("go-show"));
 }
 
 // -- 彈窗(本地決策 modal,房主/加入者共用)------------------------

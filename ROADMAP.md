@@ -149,11 +149,19 @@
    `rulesBtnLobby`)維持不變,`app.js` 完全不用改。已用 `read_page`/`getBoundingClientRect`/
    DOM class 切換驗證邏輯正確(手機寬度截圖視覺確認,桌面寬度截圖工具本身有渲染延遲問題,
    改用 DOM 狀態驗證繞過)。
-6. **勝利/失敗結算畫面**(2026-08-06 新增,尚未實作):目前 `showGameOver()`(`web/app.js`)
-   只有一行 `alert()`,是整個特效清單裡最顯眼的缺口。美術需求已整理成
-   [`ENDSCREEN_ART_BRIEF.md`](ENDSCREEN_ART_BRIEF.md)(5 個檔案:勝/敗背景各一張、勝/敗
-   徽章各一張透明 PNG、共用光點粒子一張),等使用者生圖回來後再做整合(疊背景 + 徽章浮現動畫 +
-   粒子飄散 + 再戰一次/返回大廳按鈕),取代現有 `alert()`。
+6. ~~勝利/失敗結算畫面~~ → **已解決**(2026-08-07):`ENDSCREEN_ART_BRIEF.md` 那 5 張圖生完
+   丟進 `card_game_png/game_endscreen_assets/`,處理後放進 `web/img/`(背景壓成 JPEG 約
+   260-410KB、徽章/粒子裁去透明邊界後縮到 640px/240px 寬,alpha 去背用 numpy 驗證過無綠幕
+   殘留)。`web/index.html` 新增 `#gameOverOverlay`,`web/style.css` 加 `.go-*` 一組樣式:
+   背景淡入 → 徽章彈跳浮現(`goMedallionPop` keyframe)→ 結果文字/獲勝者名/按鈕依序滑入,
+   16 顆星芒粒子用 CSS custom properties(`--gp-left/--gp-dur/--gp-delay/--gp-drift`)各自
+   跑 `goParticleRise`。`web/app.js` 的 `showGameOver()` 整個重寫:依 `winnerRole===myRole`
+   判斷勝/敗套對應圖 + `data-result` 屬性(給 CSS 挑金/藍配色),單人模式才顯示「再戰一次」
+   (沿用 `lastDifficulty`),「返回大廳」統一用 `location.reload()` 圖省事。
+   驗證方式:因為 Claude Browser 預覽窗格這次卡在「不 compositing frames」的狀態,
+   screenshot 一直失敗,改用 DOM/computed-style/network request 三管齊下驗證邏輯正確
+   (背景圖 URL、徽章 src、文字內容、按鈕顯隱、圖檔 fetch 200 都確認過),沒能肉眼看到
+   動畫本身跑起來,實機測試時请留意動畫時序/粒子效果是否符合預期。
 
 **優先度:中 — 遊戲性與節奏**
 7. **減少「無牌可出、一直按跳過」的空轉感**:太陽/月亮階段沒牌時目前還是要跑過整套提示流程,可考慮偵測「雙方皆無牌可出」時直接靜默跳過該階段,不用玩家手動點掉。

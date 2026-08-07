@@ -1358,3 +1358,130 @@ button.lobby-btn { text-align: left; }
   transform: scale(0.97);
   transition: transform 0.1s, filter 0.1s;
 }
+
+/* ===================================================================
+   結算畫面(勝利/失敗)— ENDSCREEN_ART_BRIEF.md 那組素材,
+   背景圖 + 徽章 img 的 src 由 app.js 依 data-result 動態指定,
+   這裡只負責版面/動畫,不寫死顏色(金/銀已經在美術裡了)。
+   =================================================================== */
+.go-overlay {
+  background: #05070d;
+  padding: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.go-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+.go-overlay.go-show .go-bg { opacity: 1; }
+.go-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(5,7,13,0) 35%, rgba(5,7,13,0.75) 68%, rgba(5,7,13,0.96) 100%);
+}
+.go-particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.go-particle {
+  position: absolute;
+  bottom: -40px;
+  left: var(--gp-left, 50%);
+  width: var(--gp-size, 22px);
+  height: auto;
+  opacity: 0;
+  animation: goParticleRise var(--gp-dur, 4.5s) ease-in var(--gp-delay, 0s) infinite;
+  filter: drop-shadow(0 0 6px rgba(255, 210, 120, 0.55));
+}
+@keyframes goParticleRise {
+  0% { transform: translate(0, 0) scale(0.6); opacity: 0; }
+  12% { opacity: 0.9; }
+  85% { opacity: 0.6; }
+  100% { transform: translate(var(--gp-drift, 20px), -105vh) scale(1.05); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .go-particle { animation: none; opacity: 0; } }
+
+.go-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 480px;
+  padding: 0 24px calc(40px + env(safe-area-inset-bottom, 0px));
+  text-align: center;
+}
+.go-medallion {
+  width: 128px;
+  height: 128px;
+  object-fit: contain;
+  margin-bottom: 4px;
+  opacity: 0;
+  transform: scale(0.4) rotate(-25deg);
+  filter: drop-shadow(0 4px 18px rgba(0,0,0,0.6));
+}
+.go-overlay.go-show .go-medallion {
+  animation: goMedallionPop 0.7s cubic-bezier(0.2, 1.4, 0.4, 1) 0.15s forwards;
+}
+@keyframes goMedallionPop {
+  0% { opacity: 0; transform: scale(0.4) rotate(-25deg); }
+  70% { opacity: 1; transform: scale(1.12) rotate(4deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+.go-result-text {
+  font-size: 32px;
+  font-weight: bold;
+  letter-spacing: 6px;
+  color: var(--text);
+  text-shadow: 0 2px 12px rgba(0,0,0,0.6);
+  opacity: 0;
+  transform: translateY(8px);
+}
+.go-overlay[data-result="win"] .go-result-text { color: var(--sun); }
+.go-overlay[data-result="lose"] .go-result-text { color: var(--moon); }
+.go-overlay.go-show .go-result-text {
+  animation: goTextIn 0.5s ease 0.35s forwards;
+}
+.go-winner-name {
+  font-size: 15px;
+  color: var(--text-dim);
+  letter-spacing: 2px;
+  opacity: 0;
+  transform: translateY(8px);
+}
+.go-overlay.go-show .go-winner-name {
+  animation: goTextIn 0.5s ease 0.5s forwards;
+}
+@keyframes goTextIn {
+  to { opacity: 1; transform: translateY(0); }
+}
+.go-actions {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  margin-top: 22px;
+  opacity: 0;
+  transform: translateY(8px);
+}
+.go-overlay.go-show .go-actions {
+  animation: goTextIn 0.5s ease 0.7s forwards;
+}
+.go-btn {
+  flex: 1;
+  padding: 13px 10px;
+  font-size: 15px;
+}
+.go-btn-primary {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px rgba(217,169,74,0.35), 0 2px 0 rgba(0,0,0,0.35), 0 3px 8px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.25);
+}

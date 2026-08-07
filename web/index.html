@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=36">
+<link rel="stylesheet" href="style.css?v=37">
 </head>
 <body>
 
@@ -144,6 +144,21 @@
   </div>
 </div>
 
+<div id="gameOverOverlay" class="overlay hidden go-overlay">
+  <div id="goBg" class="go-bg"></div>
+  <div class="go-scrim"></div>
+  <div id="goParticles" class="go-particles"></div>
+  <div class="go-content">
+    <img id="goMedallion" class="go-medallion" alt="">
+    <div id="goResultText" class="go-result-text"></div>
+    <div id="goWinnerName" class="go-winner-name"></div>
+    <div class="go-actions">
+      <button id="goRematchBtn" class="go-btn go-btn-primary">再戰一次</button>
+      <button id="goLobbyBtn" class="go-btn">返回大廳</button>
+    </div>
+  </div>
+</div>
+
 <div id="cardInfoOverlay" class="overlay hidden" onclick="if(event.target===this)this.classList.add('hidden')">
   <div class="modal-box card-info-box">
     <img id="cardInfoImg" class="card-info-img" alt="">
@@ -162,9 +177,9 @@
 <script src="firebase-config.js"></script>
 <!-- ?v= 是手動版本號,每次改動 rules.js/engine.js/net.js/app.js/style.css 就要遞增,
      避免玩家瀏覽器快取到部署前的舊版程式碼、看不到最新的修正 -->
-<script src="rules.js?v=36"></script>
-<script src="engine.js?v=36"></script>
-<script src="net.js?v=36"></script>
-<script src="app.js?v=36"></script>
+<script src="rules.js?v=37"></script>
+<script src="engine.js?v=37"></script>
+<script src="net.js?v=37"></script>
+<script src="app.js?v=37"></script>
 </body>
 </html>
