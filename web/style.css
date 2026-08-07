@@ -818,6 +818,55 @@ button.lobby-btn { text-align: left; }
 }
 .slot-card-img.fx-moon { animation: moonActivateFx 0.55s ease-out; }
 
+/* 太陽卡升級成功的「變身」特效(見 app.js playEvolveEffect):
+   星星欄位本尊播一段更重的金色脈衝,另外疊一張浮動的進化後卡圖 + 一道連向太陽欄位的光束,
+   三者都跟 DOM 重繪脫鉤(貼在 body 上,座標算好直接定位),避免被下一次 renderBattlefield 打斷。 */
+@keyframes evolvePulse {
+  0% { filter: brightness(1) saturate(1); box-shadow: 0 2px 5px rgba(0,0,0,0.4); transform: scale(1); }
+  20% { filter: brightness(2.1) saturate(1.6); box-shadow: 0 0 30px 11px rgba(232, 178, 58, 0.9); transform: scale(1.2); }
+  55% { filter: brightness(1.35) saturate(1.25); box-shadow: 0 0 20px 6px rgba(232, 178, 58, 0.6); transform: scale(1.06); }
+  100% { filter: brightness(1) saturate(1); box-shadow: 0 2px 5px rgba(0,0,0,0.4); transform: scale(1); }
+}
+.slot-card-img.fx-evolve-pulse { animation: evolvePulse 1s ease-out; }
+
+.evolve-overlay {
+  position: fixed;
+  z-index: 960;
+  border-radius: 6px;
+  pointer-events: none;
+  opacity: 0;
+  animation: evolveOverlayFade 1.15s ease-out forwards;
+  filter: drop-shadow(0 0 16px rgba(232, 178, 58, 0.85));
+}
+@keyframes evolveOverlayFade {
+  0% { opacity: 0; transform: scale(0.88); }
+  18% { opacity: 1; transform: scale(1.1); }
+  35% { opacity: 1; transform: scale(1); }
+  78% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.03); }
+}
+
+.evolve-beam {
+  position: fixed;
+  z-index: 955;
+  height: 4px;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, rgba(232,178,58,0), rgba(255,224,140,0.95), rgba(232,178,58,0));
+  box-shadow: 0 0 14px 3px rgba(232, 178, 58, 0.7);
+  pointer-events: none;
+  opacity: 0;
+  animation: evolveBeamFlash 0.7s ease-out forwards;
+}
+@keyframes evolveBeamFlash {
+  0% { opacity: 0; transform: scaleX(0); }
+  30% { opacity: 1; transform: scaleX(1); }
+  70% { opacity: 0.75; transform: scaleX(1); }
+  100% { opacity: 0; transform: scaleX(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .evolve-overlay, .evolve-beam { animation: none; opacity: 0; }
+}
+
 @keyframes battleWin {
   0% { transform: translateY(0) scale(1) rotate(0deg); filter: brightness(1); }
   30% { transform: translateY(var(--bump-dir, 10px)) scale(1.28) rotate(calc(var(--bump-dir, 10px) * 0.5)); filter: brightness(1.6); box-shadow: 0 0 34px 10px rgba(255, 211, 92, 0.95); }

@@ -500,6 +500,46 @@ function spawnShockwave(targetEl, variant) {
   setTimeout(() => ring.remove(), 650);
 }
 
+// 太陽卡升級成功時的「變身」特效:星星欄位本身的美術不會真的換掉(下一次
+// renderBattlefield 一樣畫回原本的石頭/布/剪刀),這裡用一張蓋在最上層、跟畫面
+// 重繪脫鉤的浮動 img 做「原圖 → 進化圖」的短暫閃現,搭配從太陽欄位射向星星欄位的
+// 光束、以及既有的衝擊波 —— 手法跟 spawnShockwave 一樣,直接算好座標貼在 body 上,
+// 才不會被下一次戰場重繪(bf.innerHTML = "")中途打斷。
+function playEvolveEffect(starTargetEl, sunTargetEl, evolvedCardName) {
+  if (!starTargetEl) return;
+  const rect = starTargetEl.getBoundingClientRect();
+
+  const overlay = document.createElement("img");
+  overlay.src = cardImgSrc(evolvedCardName);
+  overlay.alt = "";
+  overlay.className = "evolve-overlay";
+  overlay.style.left = `${rect.left}px`;
+  overlay.style.top = `${rect.top}px`;
+  overlay.style.width = `${rect.width}px`;
+  overlay.style.height = `${rect.height}px`;
+  document.body.appendChild(overlay);
+  setTimeout(() => overlay.remove(), 1150);
+
+  if (sunTargetEl) {
+    const sunRect = sunTargetEl.getBoundingClientRect();
+    const x1 = sunRect.left + sunRect.width / 2, y1 = sunRect.top + sunRect.height / 2;
+    const x2 = rect.left + rect.width / 2, y2 = rect.top + rect.height / 2;
+    const len = Math.hypot(x2 - x1, y2 - y1);
+    const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+    const beam = document.createElement("div");
+    beam.className = "evolve-beam";
+    beam.style.left = `${x1}px`;
+    beam.style.top = `${y1}px`;
+    beam.style.width = `${len}px`;
+    beam.style.transform = `rotate(${angle}deg)`;
+    document.body.appendChild(beam);
+    setTimeout(() => beam.remove(), 700);
+  }
+
+  spawnShockwave(starTargetEl, "sun");
+  fx(starTargetEl, "fx-evolve-pulse");
+}
+
 function fx(el, cls) {
   if (!el) return;
   el.classList.remove(cls);
@@ -871,8 +911,16 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
       const target = sunImg(col);
       // 【烈陽】是太陽卡裡的強化特效卡,額外炸一圈橘色衝擊波,跟普通太陽卡出牌區隔開來
       const burst = card === "烈陽" ? () => spawnShockwave(target, "sun") : null;
-      if (isOpp) flyCardIn(bandPileTileImg($("oppBand"), "太陽手牌"), target, card, () => { fx(target, "fx-sun"); if (burst) burst(); });
-      else { fx(target, "fx-sun"); if (burst) burst(); }
+      // 型別相符的升級卡(殞石頭/雷射剪刀/鈦合金布):星星卡真的被升級了,
+      // 額外在星星欄位播一段「變身」特效(見下方 playEvolveEffect),跟單純亮個光的
+      // 太陽出牌區隔開來 —— 這是本回合戰力真的改變的時刻,值得更重的演出。
+      const evo = SUN_EVOLVE[card];
+      const didEvolve = evo && evo[0] === (pub[key] || {}).star;
+      const evolveFx = didEvolve ? () => {
+        setTimeout(() => playEvolveEffect(starImg(col), target, evo[1]), 350);
+      } : null;
+      if (isOpp) flyCardIn(bandPileTileImg($("oppBand"), "太陽手牌"), target, card, () => { fx(target, "fx-sun"); if (burst) burst(); if (evolveFx) evolveFx(); });
+      else { fx(target, "fx-sun"); if (burst) burst(); if (evolveFx) evolveFx(); }
     }
   });
 
