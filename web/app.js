@@ -485,7 +485,9 @@ function delayForLogLine(text) {
   // 不確定這次有沒有真的升級成功(型別不符會直接丟棄、沒有特效),但抓最長的情況預留時間,
   // 避免特效播到一半就被下一行 log 切斷、或被下一個提示畫面蓋住。
   else if (/打出太陽卡:(殞石頭|雷射剪刀|鈦合金布)/.test(text)) extra = 2650;
-  else if (/打出太陽卡:/.test(text) || /打出【烈陽】!$/.test(text)) extra = 700; // 對手出牌有飛入動畫 + 放慢後的發光
+  else if (/打出【烈陽】!$/.test(text)) extra = 1800; // 全螢幕炙陽閃光 + 大地龜裂要多留時間播完
+  else if (/打出太陽卡:/.test(text)) extra = 700; // 對手出牌有飛入動畫 + 放慢後的發光
+  else if (/發動【日蝕】/.test(text)) extra = ECLIPSE_CUTIN_TOTAL_MS + 300; // 三格分鏡過場,要留最長的時間
   else if (/發動【.+】/.test(text)) extra = 1500; // 月亮卡改成原地翻開再亮特效,要更久
   else if (/(抽牌|抽了一張牌)。$/.test(text)) extra = 1050; // 抽牌儀式(放大置中→飛進手牌)要多留時間播完
   return 150 + extra;
@@ -606,6 +608,79 @@ function playEvolveEffect(starTargetEl, sunTargetEl, evolvedCardName) {
   fx($("battlefield"), "fx-shake");
 }
 
+// 【烈陽】發動:全螢幕炙陽閃光 + 疊在戰場下方的大地龜裂,兩張都跟 DOM 重繪脫鉤直接貼在 body 上。
+const ULTIMATE_SUN_FLARE_SRC = "img/ultimate_sun_flare.jpg";
+const ULTIMATE_SUN_GROUNDCRACK_SRC = "img/ultimate_sun_groundcrack.png";
+
+function playBlazingSunEffect() {
+  const flare = document.createElement("div");
+  flare.className = "ultimate-sun-flare";
+  flare.style.backgroundImage = `url(${ULTIMATE_SUN_FLARE_SRC})`;
+  document.body.appendChild(flare);
+  setTimeout(() => flare.remove(), 1700);
+
+  const boardEl = $("board");
+  const rect = boardEl ? boardEl.getBoundingClientRect() : null;
+  const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+  const cy = rect ? rect.top + rect.height * 0.7 : window.innerHeight * 0.7;
+  const crackW = (rect ? rect.width : window.innerWidth) * 1.25;
+  const crack = document.createElement("img");
+  crack.src = ULTIMATE_SUN_GROUNDCRACK_SRC;
+  crack.alt = "";
+  crack.className = "ultimate-sun-groundcrack";
+  crack.style.left = `${cx - crackW / 2}px`;
+  crack.style.top = `${cy - crackW * 0.35}px`;
+  crack.style.width = `${crackW}px`;
+  document.body.appendChild(crack);
+  setTimeout(() => crack.remove(), 1700);
+
+  fx($("battlefield"), "fx-shake");
+}
+
+// 【日蝕】反制成功:紅眼狼三格分鏡過場(撲咬前→咬穿瞬間→吞噬之後),硬切不淡入淡出,
+// 呼應使用者具體描述的畫面。第 2 格(咬穿瞬間)搭配畫面震動,加強打擊感。
+const ECLIPSE_CUTIN_SEQUENCE = [
+  { src: "img/eclipse_wolf_lunge.jpg", hold: 550 },
+  { src: "img/eclipse_wolf_bite.jpg", hold: 750 },
+  { src: "img/eclipse_wolf_aftermath.jpg", hold: 550 },
+];
+const ECLIPSE_CUTIN_TOTAL_MS = ECLIPSE_CUTIN_SEQUENCE.reduce((sum, f) => sum + f.hold, 0);
+
+function playEclipseCutin() {
+  const overlay = $("eclipseCutinOverlay");
+  const img = $("eclipseCutinImg");
+  overlay.classList.remove("hidden");
+  let t = 0;
+  ECLIPSE_CUTIN_SEQUENCE.forEach((frame, i) => {
+    setTimeout(() => {
+      img.src = frame.src;
+      fx(img, "eclipse-cutin-cut");
+      if (i === 1) fx($("battlefield"), "fx-shake"); // 咬穿瞬間
+    }, t);
+    t += frame.hold;
+  });
+  setTimeout(() => overlay.classList.add("hidden"), t + 100);
+}
+
+// 偷變系列(偷變石頭/偷變剪刀/偷變布)發動:疊一段紫色施法煙霧在月亮卡格上。
+const STEAL_CONJURE_PUFF_SRC = "img/steal_conjure_puff.png";
+
+function spawnStealConjurePuff(targetEl) {
+  if (!targetEl) return;
+  const rect = targetEl.getBoundingClientRect();
+  const size = rect.width * 2.2;
+  const puff = document.createElement("img");
+  puff.src = STEAL_CONJURE_PUFF_SRC;
+  puff.alt = "";
+  puff.className = "steal-conjure-puff";
+  puff.style.left = `${rect.left + rect.width / 2 - size / 2}px`;
+  puff.style.top = `${rect.top + rect.height / 2 - size / 2}px`;
+  puff.style.width = `${size}px`;
+  puff.style.height = `${size}px`;
+  document.body.appendChild(puff);
+  setTimeout(() => puff.remove(), 900);
+}
+
 function fx(el, cls) {
   if (!el) return;
   el.classList.remove(cls);
@@ -660,10 +735,34 @@ function flyGhost(fromEl, toEl, src, altText, onArrive) {
   ghost.style.opacity = "0.4";
   document.body.appendChild(ghost);
   nextPaint(() => ghost.classList.add("fly-arc"));
+  spawnSpeedStreak(fromRect, toRect);
   setTimeout(() => {
     ghost.remove();
     if (onArrive) onArrive();
   }, 440);
+}
+
+// 卡牌飛行的速度殘影:沿著起點→終點連線疊一道拖尾光跡,搭配 ghost 本身的飛行動畫,
+// 增加「咻」一聲的速度感。不用逐幀跟著飛行位置走,靜態貼一道拖尾配合淡出就有效果,
+// 跟 spawnShockwave 一樣算好座標貼在 body 上。
+const SPEED_STREAK_SRC = "img/speed_streak.png";
+
+function spawnSpeedStreak(fromRect, toRect) {
+  const x1 = fromRect.left + fromRect.width / 2, y1 = fromRect.top + fromRect.height / 2;
+  const x2 = toRect.left + toRect.width / 2, y2 = toRect.top + toRect.height / 2;
+  const len = Math.hypot(x2 - x1, y2 - y1);
+  if (len < 24) return; // 距離太短(同格附近)不畫,避免變成一團模糊
+  const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+  const streak = document.createElement("img");
+  streak.src = SPEED_STREAK_SRC;
+  streak.alt = "";
+  streak.className = "speed-streak";
+  streak.style.left = `${x1}px`;
+  streak.style.top = `${y1}px`;
+  streak.style.width = `${len}px`;
+  streak.style.transform = `translateY(-50%) rotate(${angle}deg)`;
+  document.body.appendChild(streak);
+  setTimeout(() => streak.remove(), 500);
 }
 
 function flyCardIn(fromEl, toEl, cardName, onArrive) {
@@ -975,8 +1074,9 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
     if (prevArr.length === 0 && nowArr.length > 0) {
       const card = nowArr[nowArr.length - 1];
       const target = sunImg(col);
-      // 【烈陽】是太陽卡裡的強化特效卡,額外炸一圈橘色衝擊波,跟普通太陽卡出牌區隔開來
-      const burst = card === "烈陽" ? () => spawnShockwave(target, "sun") : null;
+      // 【烈陽】是太陽卡裡的強化特效卡,額外炸一圈橘色衝擊波 + 全螢幕炙陽閃光 + 大地龜裂,
+      // 跟普通太陽卡出牌區隔開來
+      const burst = card === "烈陽" ? () => { spawnShockwave(target, "sun"); playBlazingSunEffect(); } : null;
       // 型別相符的升級卡(殞石頭/雷射剪刀/鈦合金布):星星卡真的被升級了,
       // 額外在星星欄位播一段「變身」特效(見下方 playEvolveEffect),跟單純亮個光的
       // 太陽出牌區隔開來 —— 這是本回合戰力真的改變的時刻,值得更重的演出。
@@ -1003,8 +1103,16 @@ function triggerBattleEffects(prevPub, pub, oppKey, mineKey) {
         setTimeout(() => {
           const target = moonImg(col) || col.querySelector('[data-slot-kind="moon"] .flip-front');
           fx(target, "fx-moon");
-          // 【日蝕】是月亮卡裡的反制特效卡,額外炸一圈衝擊波,跟普通月亮發動區隔開來
-          if (nowMoon === "日蝕") spawnShockwave(target, "moon");
+          // 【日蝕】是月亮卡裡的反制特效卡,播一段「紅眼狼咬碎太陽」三格分鏡過場,
+          // 播完才接原本的衝擊波,不然疊在全螢幕過場底下的光環會被蓋住看不到。
+          if (nowMoon === "日蝕") {
+            playEclipseCutin();
+            setTimeout(() => spawnShockwave(target, "moon"), ECLIPSE_CUTIN_TOTAL_MS);
+          }
+          // 偷變系列(石頭/剪刀/布):疊一段紫色施法煙霧,呼應卡面「魔法變出東西」的畫面
+          if (MOON_STEAL[nowMoon]) {
+            spawnStealConjurePuff(target);
+          }
         }, MOON_FLIP_MS);
       }, REVEAL_BEAT_MS);
     }
